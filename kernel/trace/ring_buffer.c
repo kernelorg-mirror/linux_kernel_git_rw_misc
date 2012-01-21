@@ -348,6 +348,7 @@ void *ring_buffer_event_data(struct ring_buffer_event *event)
 }
 EXPORT_SYMBOL_GPL(ring_buffer_event_data);
 
+#undef for_each_buffer_cpu
 #define for_each_buffer_cpu(buffer, cpu)		\
 	for_each_cpu(cpu, buffer->cpumask)
 
@@ -4139,3 +4140,9 @@ static int rb_cpu_notify(struct notifier_block *self,
 	return NOTIFY_OK;
 }
 #endif
+
+cpumask_var_t *ring_buffer_mask(struct ring_buffer *buffer)
+{
+	return &buffer->cpumask;
+}
+EXPORT_SYMBOL_GPL(ring_buffer_mask);

@@ -185,4 +185,9 @@ enum ring_buffer_flags {
 	RB_FL_OVERWRITE		= 1 << 0,
 };
 
+cpumask_var_t *ring_buffer_mask(struct ring_buffer *buffer);
+
+#define for_each_buffer_cpu(buffer, cpu) \
+	for_each_cpu(cpu, *(ring_buffer_mask(buffer)))
+
 #endif /* _LINUX_RING_BUFFER_H */
