@@ -14,6 +14,7 @@
 
 #define NF_LOG_TYPE_LOG		0x01
 #define NF_LOG_TYPE_ULOG	0x02
+#define NF_LOG_TYPE_RING	0x04
 
 struct nf_loginfo {
 	u_int8_t type;

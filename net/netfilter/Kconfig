@@ -533,6 +533,19 @@ config NETFILTER_XT_TARGET_LOG
 
 	  To compile it as a module, choose M here.  If unsure, say N.
 
+if NETFILTER_XT_TARGET_LOG
+
+config NETFILTER_XT_TARGET_LOG_RING
+	bool  'Ring buffer support'
+	default y
+	select RING_BUFFER
+	help
+	 Using this it is possible to record packets into one or more ring buffers
+	 instead of the kernel syslog.
+	 Each ring buffer is represented as file in /proc/net/netfilter/xt_LOG_ring/.
+
+endif
+
 config NETFILTER_XT_TARGET_MARK
 	tristate '"MARK" target support'
 	depends on NETFILTER_ADVANCED
