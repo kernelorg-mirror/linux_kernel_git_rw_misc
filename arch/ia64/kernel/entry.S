@@ -746,6 +746,14 @@ __paravirt_work_processed_syscall:
 (p6)	cmp4.ne.unc p6,p0=r15, r0		// any special work pending?
 (p6)	br.cond.spnt .work_pending_syscall
 	;;
+	adds r17=TI_STATUS+IA64_TASK_SIZE,r13
+	;;
+	ld4 r31=[r17]				// load current_thread_info()->status
+	;;
+	and r31=TS_PRESERVE,r31			// clear TS_RESTART_DONE
+	;;
+	st4 [r17]=r31
+	;;
 	// start restoring the state saved on the kernel stack (struct pt_regs):
 	ld8 r9=[r2],PT(CR_IPSR)-PT(R9)
 	ld8 r11=[r3],PT(CR_IIP)-PT(R11)
@@ -887,6 +895,14 @@ GLOBAL_ENTRY(__paravirt_leave_kernel)
 	ld8 r29=[r2],16		// load b7
 	ld8 r30=[r3],16		// load ar.csd
 (p6)	br.cond.spnt .work_pending
+	;;
+	adds r17=TI_STATUS+IA64_TASK_SIZE,r13
+	;;
+	ld4 r31=[r17]				// load current_thread_info()->status
+	;;
+	and r31=TS_PRESERVE,r31			// clear TS_RESTART_DONE
+	;;
+	st4 [r17]=r31
 	;;
 	ld8 r31=[r2],16		// load ar.ssd
 	ld8.fill r8=[r3],16
@@ -1184,7 +1200,7 @@ skip_rbs_switch:
 
 .notify:
 (pUStk)	br.call.spnt.many rp=notify_resume_user
-.ret10:	cmp.ne p6,p0=r0,r0	// p6 <- 0 (don't re-check)
+.ret10:	cmp.eq p6,p0=r0,r0	// p6 <- 1 (re-check)
 (pLvSys)br.cond.sptk.few  __paravirt_pending_syscall_end
 	br.cond.sptk.many .work_processed_kernel
 

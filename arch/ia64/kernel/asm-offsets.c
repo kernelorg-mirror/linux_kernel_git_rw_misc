@@ -39,6 +39,7 @@ void foo(void)
 	BLANK();
 
 	DEFINE(TI_FLAGS, offsetof(struct thread_info, flags));
+	DEFINE(TI_STATUS, offsetof(struct thread_info, status));
 	DEFINE(TI_CPU, offsetof(struct thread_info, cpu));
 	DEFINE(TI_PRE_COUNT, offsetof(struct thread_info, preempt_count));
 #ifdef CONFIG_VIRT_CPU_ACCOUNTING

@@ -130,6 +130,10 @@ struct thread_info {
 
 #define TS_POLLING		1 	/* true if in idle loop and not sleeping */
 #define TS_RESTORE_SIGMASK	2	/* restore signal mask in do_signal() */
+#define TS_RESTART_DONE		4
+
+/* do _not_ clear when leaving a syscall */
+#define TS_PRESERVE		(TS_POLLING | TS_RESTORE_SIGMASK)
 
 #define tsk_is_polling(t) (task_thread_info(t)->status & TS_POLLING)
 

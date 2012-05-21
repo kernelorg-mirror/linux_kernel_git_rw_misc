@@ -412,17 +412,15 @@ setup_frame (int sig, struct k_sigaction *ka, siginfo_t *info, sigset_t *set,
 	return 1;
 }
 
-static long
+static void
 handle_signal (unsigned long sig, struct k_sigaction *ka, siginfo_t *info,
 	       struct sigscratch *scr)
 {
 	if (!setup_frame(sig, ka, info, sigmask_to_save(), scr))
-		return 0;
+		return;
 
 	signal_delivered(sig, info, ka, &scr->pt,
 				 test_thread_flag(TIF_SINGLESTEP));
-
-	return 1;
 }
 
 /*
@@ -436,33 +434,31 @@ ia64_do_signal (struct sigscratch *scr, long in_syscall)
 	siginfo_t info;
 	long restart = in_syscall;
 	long errno = scr->pt.r8;
+	int signr;
+
+	if (current_thread_info()->status & TS_RESTART_DONE)
+		restart = 0;
+
+	signr = get_signal_to_deliver(&info, &ka, &scr->pt, NULL);
 
 	/*
-	 * This only loops in the rare cases of handle_signal() failing, in which case we
-	 * need to push through a forced SIGSEGV.
+	 * get_signal_to_deliver() may have run a debugger (via notify_parent())
+	 * and the debugger may have modified the state (e.g., to arrange for an
+	 * inferior call), thus it's important to check for restarting _after_
+	 * get_signal_to_deliver().
 	 */
-	while (1) {
-		int signr = get_signal_to_deliver(&info, &ka, &scr->pt, NULL);
-
+	if ((long) scr->pt.r10 != -1)
 		/*
-		 * get_signal_to_deliver() may have run a debugger (via notify_parent())
-		 * and the debugger may have modified the state (e.g., to arrange for an
-		 * inferior call), thus it's important to check for restarting _after_
-		 * get_signal_to_deliver().
+		 * A system calls has to be restarted only if one of the error codes
+		 * ERESTARTNOHAND, ERESTARTSYS, or ERESTARTNOINTR is returned.  If r10
+		 * isn't -1 then r8 doesn't hold an error code and we don't need to
+		 * restart the syscall, so we can clear the "restart" flag here.
 		 */
-		if ((long) scr->pt.r10 != -1)
-			/*
-			 * A system calls has to be restarted only if one of the error codes
-			 * ERESTARTNOHAND, ERESTARTSYS, or ERESTARTNOINTR is returned.  If r10
-			 * isn't -1 then r8 doesn't hold an error code and we don't need to
-			 * restart the syscall, so we can clear the "restart" flag here.
-			 */
-			restart = 0;
+		restart = 0;
 
-		if (signr <= 0)
-			break;
-
+	if (signr > 0) {
 		if (unlikely(restart)) {
+			current_thread_info()->status |= TS_RESTART_DONE;
 			switch (errno) {
 			      case ERESTART_RESTARTBLOCK:
 			      case ERESTARTNOHAND:
@@ -486,13 +482,14 @@ ia64_do_signal (struct sigscratch *scr, long in_syscall)
 		 * Whee!  Actually deliver the signal.  If the delivery failed, we need to
 		 * continue to iterate in this loop so we can deliver the SIGSEGV...
 		 */
-		if (handle_signal(signr, &ka, &info, scr))
-			return;
+		handle_signal(signr, &ka, &info, scr);
+		return;
 	}
 
 	/* Did we come from a system call? */
 	if (restart) {
 		/* Restart the system call - no handlers present */
+		current_thread_info()->status |= TS_RESTART_DONE;
 		if (errno == ERESTARTNOHAND || errno == ERESTARTSYS || errno == ERESTARTNOINTR
 		    || errno == ERESTART_RESTARTBLOCK)
 		{
