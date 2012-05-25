@@ -17,6 +17,7 @@
 #include <linux/tracehook.h>
 #include <linux/elf.h>
 #include <linux/unistd.h>
+#include <linux/irqflags.h>
 
 #include <asm/cacheflush.h>
 #include <asm/ucontext.h>
@@ -427,6 +428,8 @@ static void do_signal(struct pt_regs *regs, int syscall)
 asmlinkage void do_notify_resume(struct pt_regs *regs,
 		unsigned int thread_flags, int syscall)
 {
+	local_irq_enable();
+
 	if (thread_flags & _TIF_SIGPENDING)
 		do_signal(regs, syscall);
 
