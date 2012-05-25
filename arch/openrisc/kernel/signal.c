@@ -26,6 +26,7 @@
 #include <linux/unistd.h>
 #include <linux/stddef.h>
 #include <linux/tracehook.h>
+#include <linux/irqflags.h>
 
 #include <asm/processor.h>
 #include <asm/ucontext.h>
@@ -346,6 +347,8 @@ void do_signal(struct pt_regs *regs)
 
 asmlinkage void do_notify_resume(struct pt_regs *regs)
 {
+	local_irq_enable();
+
 	if (current_thread_info()->flags & _TIF_SIGPENDING)
 		do_signal(regs);
 
