@@ -27,6 +27,7 @@
 #include <linux/kernel.h>
 #include <linux/tracehook.h>
 #include <linux/signal.h>
+#include <linux/irqflags.h>
 #include <asm/stack.h>
 #include <asm/switch_to.h>
 #include <asm/homecache.h>
@@ -548,6 +549,8 @@ struct task_struct *__sched _switch_to(struct task_struct *prev,
  */
 int do_work_pending(struct pt_regs *regs, u32 thread_info_flags)
 {
+	local_irq_enable();
+
 	/* If we enter in kernel mode, do nothing and exit the caller loop. */
 	if (!user_mode(regs))
 		return 0;
