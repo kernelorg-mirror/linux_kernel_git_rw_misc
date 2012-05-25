@@ -22,6 +22,7 @@
 #include <linux/personality.h>
 #include <linux/freezer.h>
 #include <linux/tracehook.h>
+#include <linux/irqflags.h>
 #include <asm/cacheflush.h>
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
@@ -354,6 +355,8 @@ static void do_signal(struct pt_regs *regs)
  */
 void do_notify_resume(struct pt_regs *regs, __u32 thread_info_flags)
 {
+	local_irq_enable();
+
 	/* Pending single-step? */
 	if (thread_info_flags & _TIF_SINGLESTEP)
 		clear_thread_flag(TIF_SINGLESTEP);
