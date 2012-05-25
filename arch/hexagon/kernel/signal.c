@@ -22,6 +22,7 @@
 #include <linux/syscalls.h>
 #include <linux/freezer.h>
 #include <linux/tracehook.h>
+#include <linux/irqflags.h>
 #include <asm/registers.h>
 #include <asm/thread_info.h>
 #include <asm/unistd.h>
@@ -236,6 +237,8 @@ no_restart:
 
 void do_notify_resume(struct pt_regs *regs, unsigned long thread_info_flags)
 {
+	local_irq_enable();
+
 	if (thread_info_flags & _TIF_SIGPENDING)
 		do_signal(regs);
 
