@@ -23,6 +23,7 @@
 #include <linux/unistd.h>
 #include <linux/stddef.h>
 #include <linux/tracehook.h>
+#include <linux/irqflags.h>
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -656,6 +657,8 @@ handle_signal(unsigned long sig, siginfo_t *info, struct k_sigaction *ka,
 
 asmlinkage void do_notify_resume(struct pt_regs *regs, unsigned long thread_info_flags)
 {
+	local_irq_enable();
+
 	if (thread_info_flags & _TIF_SIGPENDING)
 		do_signal(regs);
 
