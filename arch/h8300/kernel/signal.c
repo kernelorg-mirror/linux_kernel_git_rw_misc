@@ -40,6 +40,7 @@
 #include <linux/binfmts.h>
 #include <linux/freezer.h>
 #include <linux/tracehook.h>
+#include <linux/irqflags.h>
 
 #include <asm/setup.h>
 #include <asm/uaccess.h>
@@ -491,6 +492,8 @@ statis void do_signal(struct pt_regs *regs)
 
 asmlinkage void do_notify_resume(struct pt_regs *regs, u32 thread_info_flags)
 {
+	local_irq_enable();
+
 	if (thread_info_flags & _TIF_SIGPENDING)
 		do_signal(regs);
 
