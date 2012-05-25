@@ -13,6 +13,7 @@
 #include <linux/freezer.h>
 #include <linux/uaccess.h>
 #include <linux/tracehook.h>
+#include <linux/irqflags.h>
 
 #include <asm/elf.h>
 #include <asm/cacheflush.h>
@@ -642,6 +643,8 @@ static void do_signal(struct pt_regs *regs, int syscall)
 asmlinkage void
 do_notify_resume(struct pt_regs *regs, unsigned int thread_flags, int syscall)
 {
+	local_irq_enable();
+
 	if (thread_flags & _TIF_SIGPENDING)
 		do_signal(regs, syscall);
 
