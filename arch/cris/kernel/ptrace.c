@@ -17,6 +17,7 @@
 #include <linux/ptrace.h>
 #include <linux/user.h>
 #include <linux/tracehook.h>
+#include <linux/irqflags.h>
 
 #include <asm/uaccess.h>
 #include <asm/page.h>
@@ -33,6 +34,8 @@ extern int do_signal(int canrestart, struct pt_regs *regs);
 void do_notify_resume(int canrestart, struct pt_regs *regs,
 		      __u32 thread_info_flags)
 {
+	local_irq_enable();
+
 	/* deal with pending signal delivery */
 	if (thread_info_flags & _TIF_SIGPENDING)
 		do_signal(canrestart,regs);
