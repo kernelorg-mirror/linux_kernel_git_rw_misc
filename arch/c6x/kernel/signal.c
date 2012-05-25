@@ -15,6 +15,7 @@
 #include <linux/uaccess.h>
 #include <linux/syscalls.h>
 #include <linux/tracehook.h>
+#include <linux/irqflags.h>
 
 #include <asm/ucontext.h>
 #include <asm/cacheflush.h>
@@ -330,6 +331,8 @@ static void do_signal(struct pt_regs *regs, int syscall)
 asmlinkage void do_notify_resume(struct pt_regs *regs, u32 thread_info_flags,
 				 int syscall)
 {
+	local_irq_enable();
+
 	/* deal with pending signal delivery */
 	if (thread_info_flags & (1 << TIF_SIGPENDING))
 		do_signal(regs, syscall);
