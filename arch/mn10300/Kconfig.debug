@@ -32,7 +32,7 @@ config KPROBES
 
 config GDBSTUB
 	bool "Remote GDB kernel debugging"
-	depends on DEBUG_KERNEL && DEPRECATED
+	depends on DEBUG_KERNEL
 	select DEBUG_INFO
 	select FRAME_POINTER
 	help
