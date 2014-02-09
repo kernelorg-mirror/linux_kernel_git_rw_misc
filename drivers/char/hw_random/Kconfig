@@ -253,7 +253,7 @@ config HW_RANDOM_NOMADIK
 
 config HW_RANDOM_PICOXCELL
 	tristate "Picochip picoXcell true random number generator support"
-	depends on HW_RANDOM && ARCH_PICOXCELL && PICOXCELL_PC3X3
+	depends on HW_RANDOM && ARCH_PICOXCELL
 	---help---
 	  This driver provides kernel-side support for the Random Number
 	  Generator hardware found on Picochip PC3x3 and later devices.
