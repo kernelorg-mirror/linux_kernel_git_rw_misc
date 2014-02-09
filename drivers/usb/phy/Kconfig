@@ -61,7 +61,6 @@ config KEYSTONE_USB_PHY
 
 config MV_U3D_PHY
 	bool "Marvell USB 3.0 PHY controller Driver"
-	depends on CPU_MMP3
 	select USB_PHY
 	help
 	  Enable this to support Marvell USB 3.0 phy controller for Marvell
