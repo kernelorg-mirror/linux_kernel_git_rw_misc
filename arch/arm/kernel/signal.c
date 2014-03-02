@@ -10,7 +10,6 @@
 #include <linux/errno.h>
 #include <linux/random.h>
 #include <linux/signal.h>
-#include <linux/personality.h>
 #include <linux/uaccess.h>
 #include <linux/tracehook.h>
 
@@ -317,17 +316,6 @@ get_sigframe(struct ksignal *ksig, struct pt_regs *regs, int framesize)
 	return frame;
 }
 
-/*
- * translate the signal
- */
-static inline int map_sig(int sig)
-{
-	struct thread_info *thread = current_thread_info();
-	if (sig < 32 && thread->exec_domain && thread->exec_domain->signal_invmap)
-		sig = thread->exec_domain->signal_invmap[sig];
-	return sig;
-}
-
 static int
 setup_return(struct pt_regs *regs, struct ksignal *ksig,
 	     unsigned long __user *rc, void __user *frame)
@@ -411,7 +399,7 @@ setup_return(struct pt_regs *regs, struct ksignal *ksig,
 		}
 	}
 
-	regs->ARM_r0 = map_sig(ksig->sig);
+	regs->ARM_r0 = translate_signal(ksig->sig);
 	regs->ARM_sp = (unsigned long)frame;
 	regs->ARM_lr = retcode;
 	regs->ARM_pc = handler;
