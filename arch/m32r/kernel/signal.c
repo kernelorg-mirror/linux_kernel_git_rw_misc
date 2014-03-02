@@ -19,7 +19,6 @@
 #include <linux/wait.h>
 #include <linux/unistd.h>
 #include <linux/stddef.h>
-#include <linux/personality.h>
 #include <linux/tracehook.h>
 #include <asm/cacheflush.h>
 #include <asm/ucontext.h>
@@ -178,18 +177,14 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 {
 	struct rt_sigframe __user *frame;
 	int err = 0;
-	int signal, sig = ksig->sig;
+	int signal;
 
 	frame = get_sigframe(&ksig->ka, regs->spu, sizeof(*frame));
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		return -EFAULT;
 
-	signal = current_thread_info()->exec_domain
-		&& current_thread_info()->exec_domain->signal_invmap
-		&& sig < 32
-		? current_thread_info()->exec_domain->signal_invmap[sig]
-		: sig;
+	signal = translate_signal(ksig->sig);
 
 	err |= __put_user(signal, &frame->sig);
 	if (err)
