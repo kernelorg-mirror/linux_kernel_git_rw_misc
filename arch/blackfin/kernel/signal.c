@@ -8,7 +8,6 @@
 #include <linux/syscalls.h>
 #include <linux/ptrace.h>
 #include <linux/tty.h>
-#include <linux/personality.h>
 #include <linux/binfmts.h>
 #include <linux/uaccess.h>
 #include <linux/tracehook.h>
@@ -159,11 +158,7 @@ setup_rt_frame(struct ksignal *ksig, sigset_t *set, struct pt_regs *regs)
 
 	frame = get_sigframe(&ksig->ka, regs, sizeof(*frame));
 
-	err |= __put_user((current_thread_info()->exec_domain
-			   && current_thread_info()->exec_domain->signal_invmap
-			   && ksig->sig < 32
-			   ? current_thread_info()->exec_domain->
-			   signal_invmap[ksig->sig] : ksig->sig), &frame->sig);
+	err |= __put_user(translate_signal(ksig->sig), &frame->sig);
 
 	err |= __put_user(&frame->info, &frame->pinfo);
 	err |= __put_user(&frame->uc, &frame->puc);
