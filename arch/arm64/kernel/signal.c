@@ -19,7 +19,6 @@
 
 #include <linux/errno.h>
 #include <linux/signal.h>
-#include <linux/personality.h>
 #include <linux/freezer.h>
 #include <linux/uaccess.h>
 #include <linux/tracehook.h>
@@ -282,14 +281,8 @@ static void handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 	struct thread_info *thread = current_thread_info();
 	struct task_struct *tsk = current;
 	sigset_t *oldset = sigmask_to_save();
-	int usig = ksig->sig;
+	int usig = translate_signal(ksig->sig);
 	int ret;
-
-	/*
-	 * translate the signal
-	 */
-	if (usig < 32 && thread->exec_domain && thread->exec_domain->signal_invmap)
-		usig = thread->exec_domain->signal_invmap[usig];
 
 	/*
 	 * Set up the stack frame
