@@ -21,7 +21,6 @@
 #include <linux/wait.h>
 #include <linux/unistd.h>
 #include <linux/stddef.h>
-#include <linux/personality.h>
 #include <linux/suspend.h>
 #include <linux/ptrace.h>
 #include <linux/elf.h>
@@ -195,19 +194,12 @@ int compat_setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 {
 	unsigned long restorer;
 	struct compat_rt_sigframe __user *frame;
-	int err = 0, sig = ksig->sig;
-	int usig;
+	int err = 0;
 
 	frame = compat_get_sigframe(&ksig->ka, regs, sizeof(*frame));
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		goto err;
-
-	usig = current_thread_info()->exec_domain
-		&& current_thread_info()->exec_domain->signal_invmap
-		&& sig < 32
-		? current_thread_info()->exec_domain->signal_invmap[sig]
-		: sig;
 
 	/* Always write at least the signal number for the stack backtracer. */
 	if (ksig->ka.sa.sa_flags & SA_SIGINFO) {
@@ -243,7 +235,7 @@ int compat_setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 	regs->ex1 = PL_ICS_EX1(USER_PL, 1); /* set crit sec in handler */
 	regs->sp = ptr_to_compat_reg(frame);
 	regs->lr = restorer;
-	regs->regs[0] = (unsigned long) usig;
+	regs->regs[0] = (unsigned long) translate_signal(ksig->sig);
 	regs->regs[1] = ptr_to_compat_reg(&frame->info);
 	regs->regs[2] = ptr_to_compat_reg(&frame->uc);
 	regs->flags |= PT_FLAGS_CALLER_SAVES;
