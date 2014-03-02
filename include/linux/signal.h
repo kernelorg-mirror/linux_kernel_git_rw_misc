@@ -2,6 +2,8 @@
 #define _LINUX_SIGNAL_H
 
 #include <linux/list.h>
+#include <linux/personality.h>
+#include <linux/thread_info.h>
 #include <uapi/linux/signal.h>
 
 struct task_struct;
@@ -284,6 +286,16 @@ struct ksignal {
 	siginfo_t info;
 	int sig;
 };
+
+static inline int translate_signal(int sig)
+{
+	struct thread_info *info = current_thread_info();
+
+	if (info->exec_domain && info->exec_domain->signal_invmap && sig < 32)
+		return info->exec_domain->signal_invmap[sig];
+
+	return sig;
+}
 
 extern int get_signal(struct ksignal *ksig);
 extern void signal_setup_done(int failed, struct ksignal *ksig, int stepping);
