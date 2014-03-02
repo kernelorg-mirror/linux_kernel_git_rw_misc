@@ -18,7 +18,6 @@
 #include <linux/tracehook.h>
 #include <linux/unistd.h>
 #include <linux/stddef.h>
-#include <linux/personality.h>
 #include <linux/uaccess.h>
 #include <linux/user-return-notifier.h>
 #include <linux/uprobes.h>
@@ -596,12 +595,10 @@ badframe:
 static int signr_convert(int sig)
 {
 #ifdef CONFIG_X86_32
-	struct thread_info *info = current_thread_info();
-
-	if (info->exec_domain && info->exec_domain->signal_invmap && sig < 32)
-		return info->exec_domain->signal_invmap[sig];
-#endif /* CONFIG_X86_32 */
+	return translate_signal(sig);
+#else /* CONFIG_X86_32 */
 	return sig;
+#endif
 }
 
 static int
