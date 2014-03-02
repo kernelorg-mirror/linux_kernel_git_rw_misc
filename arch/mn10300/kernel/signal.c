@@ -20,7 +20,6 @@
 #include <linux/unistd.h>
 #include <linux/stddef.h>
 #include <linux/tty.h>
-#include <linux/personality.h>
 #include <linux/suspend.h>
 #include <linux/tracehook.h>
 #include <asm/cacheflush.h>
@@ -211,20 +210,13 @@ static int setup_frame(struct ksignal *ksig, sigset_t *set,
 		       struct pt_regs *regs)
 {
 	struct sigframe __user *frame;
-	int rsig, sig = ksig->sig;
 
 	frame = get_sigframe(&ksig->ka, regs, sizeof(*frame));
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		return -EFAULT;
 
-	rsig = sig;
-	if (sig < 32 &&
-	    current_thread_info()->exec_domain &&
-	    current_thread_info()->exec_domain->signal_invmap)
-		rsig = current_thread_info()->exec_domain->signal_invmap[sig];
-
-	if (__put_user(rsig, &frame->sig) < 0 ||
+	if (__put_user(translate_signal(ksig->sig), &frame->sig) < 0 ||
 	    __put_user(&frame->sc, &frame->psc) < 0)
 		return -EFAULT;
 
@@ -260,12 +252,12 @@ static int setup_frame(struct ksignal *ksig, sigset_t *set,
 	/* set up registers for signal handler */
 	regs->sp = (unsigned long) frame;
 	regs->pc = (unsigned long) ksig->ka.sa.sa_handler;
-	regs->d0 = sig;
+	regs->d0 = ksig->sig;
 	regs->d1 = (unsigned long) &frame->sc;
 
 #if DEBUG_SIG
 	printk(KERN_DEBUG "SIG deliver %d (%s:%d): sp=%p pc=%lx ra=%p\n",
-	       sig, current->comm, current->pid, frame, regs->pc,
+	       ksig->sig, current->comm, current->pid, frame, regs->pc,
 	       frame->pretcode);
 #endif
 
@@ -279,20 +271,13 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 			  struct pt_regs *regs)
 {
 	struct rt_sigframe __user *frame;
-	int rsig, sig = ksig->sig;
 
 	frame = get_sigframe(&ksig->ka, regs, sizeof(*frame));
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		return -EFAULT;
 
-	rsig = sig;
-	if (sig < 32 &&
-	    current_thread_info()->exec_domain &&
-	    current_thread_info()->exec_domain->signal_invmap)
-		rsig = current_thread_info()->exec_domain->signal_invmap[sig];
-
-	if (__put_user(rsig, &frame->sig) ||
+	if (__put_user(translate_signal(ksig->sig), &frame->sig) ||
 	    __put_user(&frame->info, &frame->pinfo) ||
 	    __put_user(&frame->uc, &frame->puc) ||
 	    copy_siginfo_to_user(&frame->info, &ksig->info))
@@ -332,12 +317,12 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 	/* Set up registers for signal handler */
 	regs->sp = (unsigned long) frame;
 	regs->pc = (unsigned long) ksig->ka.sa.sa_handler;
-	regs->d0 = sig;
+	regs->d0 = ksig->sig;
 	regs->d1 = (long) &frame->info;
 
 #if DEBUG_SIG
 	printk(KERN_DEBUG "SIG deliver %d (%s:%d): sp=%p pc=%lx ra=%p\n",
-	       sig, current->comm, current->pid, frame, regs->pc,
+	       ksig->sig, current->comm, current->pid, frame, regs->pc,
 	       frame->pretcode);
 #endif
 
