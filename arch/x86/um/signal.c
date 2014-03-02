@@ -5,7 +5,6 @@
  */
 
 
-#include <linux/personality.h>
 #include <linux/ptrace.h>
 #include <linux/kernel.h>
 #include <asm/unistd.h>
@@ -504,7 +503,7 @@ int setup_signal_stack_si(unsigned long stack_top, struct ksignal *ksig,
 			  struct pt_regs *regs, sigset_t *set)
 {
 	struct rt_sigframe __user *frame;
-	int err = 0, sig = ksig->sig;
+	int err = 0;
 
 	frame = (struct rt_sigframe __user *)
 		round_down(stack_top - sizeof(struct rt_sigframe), 16);
@@ -550,14 +549,8 @@ int setup_signal_stack_si(unsigned long stack_top, struct ksignal *ksig,
 		return err;
 
 	/* Set up registers for signal handler */
-	{
-		struct exec_domain *ed = current_thread_info()->exec_domain;
-		if (unlikely(ed && ed->signal_invmap && sig < 32))
-			sig = ed->signal_invmap[sig];
-	}
-
 	PT_REGS_SP(regs) = (unsigned long) frame;
-	PT_REGS_DI(regs) = sig;
+	PT_REGS_DI(regs) = translate_signal(ksig->sig);
 	/* In case the signal handler was declared without prototypes */
 	PT_REGS_AX(regs) = 0;
 
