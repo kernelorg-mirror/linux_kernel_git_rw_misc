@@ -49,7 +49,6 @@
 
 #include <linux/signal.h>
 #include <linux/ptrace.h>
-#include <linux/personality.h>
 #include <linux/uaccess.h>
 #include <linux/syscalls.h>
 #include <linux/tracehook.h>
@@ -166,18 +165,6 @@ static inline void __user *get_sigframe(struct k_sigaction *ka,
 	return frame;
 }
 
-/*
- * translate the signal
- */
-static inline int map_sig(int sig)
-{
-	struct thread_info *thread = current_thread_info();
-	if (thread->exec_domain && thread->exec_domain->signal_invmap
-	    && sig < 32)
-		sig = thread->exec_domain->signal_invmap[sig];
-	return sig;
-}
-
 static int
 setup_rt_frame(struct ksignal *ksig, sigset_t *set, struct pt_regs *regs)
 {
@@ -226,7 +213,7 @@ setup_rt_frame(struct ksignal *ksig, sigset_t *set, struct pt_regs *regs)
 		return err;
 
 	/* #1 arg to the user Signal handler */
-	regs->r0 = map_sig(ksig->sig);
+	regs->r0 = translate_signal(ksig->sig);
 
 	/* setup PC of user space signal handler */
 	regs->ret = (unsigned long)ksig->ka.sa.sa_handler;
