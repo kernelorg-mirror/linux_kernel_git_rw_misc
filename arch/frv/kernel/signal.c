@@ -19,7 +19,6 @@
 #include <linux/wait.h>
 #include <linux/ptrace.h>
 #include <linux/unistd.h>
-#include <linux/personality.h>
 #include <linux/tracehook.h>
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
@@ -183,7 +182,6 @@ static inline void __user *get_sigframe(struct k_sigaction *ka,
 static int setup_frame(struct ksignal *ksig, sigset_t *set)
 {
 	struct sigframe __user *frame;
-	int rsig, sig = ksig->sig;
 
 	set_fs(USER_DS);
 
@@ -192,13 +190,7 @@ static int setup_frame(struct ksignal *ksig, sigset_t *set)
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		return -EFAULT;
 
-	rsig = sig;
-	if (sig < 32 &&
-	    __current_thread_info->exec_domain &&
-	    __current_thread_info->exec_domain->signal_invmap)
-		rsig = __current_thread_info->exec_domain->signal_invmap[sig];
-
-	if (__put_user(rsig, &frame->sig) < 0)
+	if (__put_user(translate_signal(ksig->sig), &frame->sig) < 0)
 		return -EFAULT;
 
 	if (setup_sigcontext(&frame->sc, set->sig[0]))
@@ -246,11 +238,11 @@ static int setup_frame(struct ksignal *ksig, sigset_t *set)
 
 	__frame->sp   = (unsigned long) frame;
 	__frame->lr   = (unsigned long) &frame->retcode;
-	__frame->gr8  = sig;
+	__frame->gr8  = ksig->sig;
 
 #if DEBUG_SIG
 	printk("SIG deliver %d (%s:%d): sp=%p pc=%lx ra=%p\n",
-	       sig, current->comm, current->pid, frame, __frame->pc,
+	       ksig->sig, current->comm, current->pid, frame, __frame->pc,
 	       frame->pretcode);
 #endif
 
@@ -264,7 +256,6 @@ static int setup_frame(struct ksignal *ksig, sigset_t *set)
 static int setup_rt_frame(struct ksignal *ksig, sigset_t *set)
 {
 	struct rt_sigframe __user *frame;
-	int rsig, sig = ksig->sig;
 
 	set_fs(USER_DS);
 
@@ -273,13 +264,7 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set)
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		return -EFAULT;
 
-	rsig = sig;
-	if (sig < 32 &&
-	    __current_thread_info->exec_domain &&
-	    __current_thread_info->exec_domain->signal_invmap)
-		rsig = __current_thread_info->exec_domain->signal_invmap[sig];
-
-	if (__put_user(rsig,		&frame->sig) ||
+	if (__put_user(translate_signal(ksig->sig), &frame->sig) ||
 	    __put_user(&frame->info,	&frame->pinfo) ||
 	    __put_user(&frame->uc,	&frame->puc))
 		return -EFAULT;
@@ -335,12 +320,12 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set)
 
 	__frame->sp  = (unsigned long) frame;
 	__frame->lr  = (unsigned long) &frame->retcode;
-	__frame->gr8 = sig;
+	__frame->gr8 = ksig->sig;
 	__frame->gr9 = (unsigned long) &frame->info;
 
 #if DEBUG_SIG
 	printk("SIG deliver %d (%s:%d): sp=%p pc=%lx ra=%p\n",
-	       sig, current->comm, current->pid, frame, __frame->pc,
+	       ksig->sig, current->comm, current->pid, frame, __frame->pc,
 	       frame->pretcode);
 #endif
 	return 0;
