@@ -28,7 +28,6 @@
 #include <linux/ptrace.h>
 #include <linux/unistd.h>
 #include <linux/stddef.h>
-#include <linux/personality.h>
 #include <linux/percpu.h>
 #include <linux/linkage.h>
 #include <linux/tracehook.h>
@@ -160,8 +159,7 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 			  struct pt_regs *regs)
 {
 	struct rt_sigframe __user *frame;
-	int err = 0, sig = ksig->sig;
-	int signal;
+	int err = 0, signal;
 	unsigned long address = 0;
 #ifdef CONFIG_MMU
 	pmd_t *pmdp;
@@ -173,11 +171,7 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		return -EFAULT;
 
-	signal = current_thread_info()->exec_domain
-		&& current_thread_info()->exec_domain->signal_invmap
-		&& sig < 32
-		? current_thread_info()->exec_domain->signal_invmap[sig]
-		: sig;
+	signal = translate_signal(ksig->sig);
 
 	if (ksig->ka.sa.sa_flags & SA_SIGINFO)
 		err |= copy_siginfo_to_user(&frame->info, &ksig->info);
