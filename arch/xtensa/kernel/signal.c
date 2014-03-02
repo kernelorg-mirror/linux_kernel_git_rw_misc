@@ -18,7 +18,6 @@
 #include <linux/signal.h>
 #include <linux/errno.h>
 #include <linux/ptrace.h>
-#include <linux/personality.h>
 #include <linux/tracehook.h>
 
 #include <asm/ucontext.h>
@@ -335,8 +334,7 @@ static int setup_frame(struct ksignal *ksig, sigset_t *set,
 		       struct pt_regs *regs)
 {
 	struct rt_sigframe *frame;
-	int err = 0, sig = ksig->sig;
-	int signal;
+	int err = 0, signal;
 	unsigned long sp, ra, tp;
 
 	sp = regs->areg[1];
@@ -354,11 +352,7 @@ static int setup_frame(struct ksignal *ksig, sigset_t *set,
 		return -EFAULT;
 	}
 
-	signal = current_thread_info()->exec_domain
-		&& current_thread_info()->exec_domain->signal_invmap
-		&& sig < 32
-		? current_thread_info()->exec_domain->signal_invmap[sig]
-		: sig;
+	signal = translate_signal(ksig->sig);
 
 	if (ksig->ka.sa.sa_flags & SA_SIGINFO) {
 		err |= copy_siginfo_to_user(&frame->info, &ksig->info);
