@@ -17,7 +17,6 @@
 #include <linux/signal.h>
 #include <linux/errno.h>
 #include <linux/wait.h>
-#include <linux/personality.h>
 #include <linux/ptrace.h>
 #include <linux/unistd.h>
 #include <linux/stddef.h>
@@ -377,19 +376,14 @@ void sa_default_rt_restorer(void);	/* See comments below */
 static int setup_frame(struct ksignal *ksig, sigset_t *set, struct pt_regs *regs)
 {
 	struct sigframe __user *frame;
-	int err = 0, sig = ksig->sig;
-	int signal;
+	int err = 0, signal;
 
 	frame = get_sigframe(&ksig->ka, regs->regs[REG_SP], sizeof(*frame));
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		return -EFAULT;
 
-	signal = current_thread_info()->exec_domain
-		&& current_thread_info()->exec_domain->signal_invmap
-		&& sig < 32
-		? current_thread_info()->exec_domain->signal_invmap[sig]
-		: sig;
+	signal = translate_signal(ksig->sig);
 
 	err |= setup_sigcontext(&frame->sc, regs, set->sig[0]);
 
@@ -472,19 +466,14 @@ static int setup_rt_frame(struct ksignal *kig, sigset_t *set,
 			  struct pt_regs *regs)
 {
 	struct rt_sigframe __user *frame;
-	int err = 0, sig = ksig->sig;
-	int signal;
+	int err = 0, signal;
 
 	frame = get_sigframe(&ksig->ka, regs->regs[REG_SP], sizeof(*frame));
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		return -EFAULT;
 
-	signal = current_thread_info()->exec_domain
-		&& current_thread_info()->exec_domain->signal_invmap
-		&& sig < 32
-		? current_thread_info()->exec_domain->signal_invmap[sig]
-		: sig;
+	signal = translate_signal(ksig->sig);
 
 	err |= __put_user(&frame->info, &frame->pinfo);
 	err |= __put_user(&frame->uc, &frame->puc);

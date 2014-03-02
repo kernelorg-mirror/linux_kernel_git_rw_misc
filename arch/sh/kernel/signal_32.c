@@ -20,7 +20,6 @@
 #include <linux/stddef.h>
 #include <linux/tty.h>
 #include <linux/elf.h>
-#include <linux/personality.h>
 #include <linux/binfmts.h>
 #include <linux/io.h>
 #include <linux/tracehook.h>
@@ -270,19 +269,12 @@ static int setup_frame(struct ksignal *ksig, sigset_t *set,
 		       struct pt_regs *regs)
 {
 	struct sigframe __user *frame;
-	int err = 0, sig = ksig->sig;
-	int signal;
+	int err = 0;
 
 	frame = get_sigframe(&ksig->ka, regs->regs[15], sizeof(*frame));
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		return -EFAULT;
-
-	signal = current_thread_info()->exec_domain
-		&& current_thread_info()->exec_domain->signal_invmap
-		&& sig < 32
-		? current_thread_info()->exec_domain->signal_invmap[sig]
-		: sig;
 
 	err |= setup_sigcontext(&frame->sc, regs, set->sig[0]);
 
@@ -317,7 +309,7 @@ static int setup_frame(struct ksignal *ksig, sigset_t *set,
 
 	/* Set up registers for signal handler */
 	regs->regs[15] = (unsigned long) frame;
-	regs->regs[4] = signal; /* Arg for signal handler */
+	regs->regs[4] = translate_signal(ksig->sig); /* Arg for signal handler */
 	regs->regs[5] = 0;
 	regs->regs[6] = (unsigned long) &frame->sc;
 
@@ -345,19 +337,12 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 			  struct pt_regs *regs)
 {
 	struct rt_sigframe __user *frame;
-	int err = 0, sig = ksig->sig;
-	int signal;
+	int err = 0;
 
 	frame = get_sigframe(&ksig->ka, regs->regs[15], sizeof(*frame));
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		return -EFAULT;
-
-	signal = current_thread_info()->exec_domain
-		&& current_thread_info()->exec_domain->signal_invmap
-		&& sig < 32
-		? current_thread_info()->exec_domain->signal_invmap[sig]
-		: sig;
 
 	err |= copy_siginfo_to_user(&frame->info, &ksig->info);
 
@@ -396,7 +381,7 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 
 	/* Set up registers for signal handler */
 	regs->regs[15] = (unsigned long) frame;
-	regs->regs[4] = signal; /* Arg for signal handler */
+	regs->regs[4] = translate_signal(ksig->sig); /* Arg for signal handler */
 	regs->regs[5] = (unsigned long) &frame->info;
 	regs->regs[6] = (unsigned long) &frame->uc;
 
