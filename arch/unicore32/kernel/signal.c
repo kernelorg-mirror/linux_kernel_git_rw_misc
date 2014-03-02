@@ -11,7 +11,6 @@
  */
 #include <linux/errno.h>
 #include <linux/signal.h>
-#include <linux/personality.h>
 #include <linux/uaccess.h>
 #include <linux/tracehook.h>
 #include <linux/elf.h>
@@ -211,13 +210,9 @@ static inline void __user *get_sigframe(struct k_sigaction *ka,
 	return frame;
 }
 
-static int setup_return(struct pt_regs *regs, struct k_sigaction *ka,
-	     unsigned long __user *rc, void __user *frame, int usig)
+static int setup_return(struct ksignal *ksig, struct pt_regs *regs,
+			unsigned long __user *rc, void __user *frame)
 {
-	unsigned long handler = (unsigned long)ka->sa.sa_handler;
-	unsigned long retcode;
-	unsigned long asr = regs->UCreg_asr & ~PSR_f;
-
 	unsigned int idx = 0;
 
 	if (ka->sa.sa_flags & SA_SIGINFO)
@@ -227,13 +222,11 @@ static int setup_return(struct pt_regs *regs, struct k_sigaction *ka,
 	    __put_user(sigreturn_codes[idx+1], rc+1))
 		return 1;
 
-	retcode = KERN_SIGRETURN_CODE + (idx << 2);
-
-	regs->UCreg_00 = usig;
+	regs->UCreg_00 = translate_signal(ksig->sig);
 	regs->UCreg_sp = (unsigned long)frame;
-	regs->UCreg_lr = retcode;
-	regs->UCreg_pc = handler;
-	regs->UCreg_asr = asr;
+	regs->UCreg_lr = KERN_SIGRETURN_CODE + (idx << 2);
+	regs->UCreg_pc = (unsigned long)ksig->ka.sa.sa_handler;
+	regs->UCreg_asr = regs->UCreg_asr & ~PSR_f;
 
 	return 0;
 }
@@ -254,7 +247,7 @@ static int setup_frame(struct ksignal *ksig, sigset_t *set,
 
 	err |= setup_sigframe(frame, regs, set);
 	if (err == 0)
-		err |= setup_return(regs, &ksig->ka, frame->retcode, frame, usig);
+		err |= setup_return(ksig, regs, frame->retcode, frame);
 
 	return err;
 }
@@ -276,7 +269,7 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 	err |= __save_altstack(&frame->sig.uc.uc_stack, regs->UCreg_sp);
 	err |= setup_sigframe(&frame->sig, regs, set);
 	if (err == 0)
-		err |= setup_return(regs, &ksig->ka, frame->sig.retcode, frame, usig);
+		err |= setup_return(ksig, regs, frame->sig.retcode, frame);
 
 	if (err == 0) {
 		/*
@@ -305,7 +298,6 @@ static void handle_signal(struct ksignal *ksig, struct pt_regs *regs,
 	struct thread_info *thread = current_thread_info();
 	struct task_struct *tsk = current;
 	sigset_t *oldset = sigmask_to_save();
-	int usig = ksig->sig;
 	int ret;
 
 	/*
@@ -327,13 +319,6 @@ static void handle_signal(struct ksignal *ksig, struct pt_regs *regs,
 			setup_syscall_restart(regs);
 		}
 	}
-
-	/*
-	 * translate the signal
-	 */
-	if (usig < 32 && thread->exec_domain
-			&& thread->exec_domain->signal_invmap)
-		usig = thread->exec_domain->signal_invmap[usig];
 
 	/*
 	 * Set up the stack frame
