@@ -14,13 +14,6 @@
 #define tlb_end_vma(tlb, vma) \
 	flush_tlb_range(vma, vma->vm_start, vma->vm_end)
 
-#define __tlb_remove_tlb_entry(tlb, pte, address) do { } while(0)
-
-/*
- * Flush whole TLB for MM
- */
-#define tlb_flush(tlb) flush_tlb_mm((tlb)->mm)
-
 #include <asm-generic/tlb.h>
 
 /*
