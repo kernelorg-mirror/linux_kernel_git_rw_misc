@@ -30,6 +30,10 @@
 
 extern void tlb_flush(struct mmu_gather *tlb);
 
+/* These defines are needed to override the defaults from asm-generic/tlb.h */
+#define tlb_flush tlb_flush
+#define __tlb_remove_tlb_entry __tlb_remove_tlb_entry
+
 /* Get the generic bits... */
 #include <asm-generic/tlb.h>
 
