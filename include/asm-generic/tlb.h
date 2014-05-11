@@ -149,6 +149,30 @@ static inline void tlb_remove_page(struct mmu_gather *tlb, struct page *page)
 #define __tlb_remove_pmd_tlb_entry(tlb, pmdp, address) do {} while (0)
 #endif
 
+#ifndef tlb_start_vma
+#define tlb_start_vma(tlb, vma) do {} while (0)
+#endif
+
+#ifndef tlb_end_vma
+#define tlb_end_vma(tlb, vma) do {} while (0)
+#endif
+
+#ifndef __tlb_remove_tlb_entry
+#define __tlb_remove_tlb_entry(tlb, ptep, address) do {} while (0)
+#endif
+
+#ifndef tlb_flush
+#define tlb_flush(tlb) flush_tlb_mm((tlb)->mm)
+#endif
+
+#ifndef __pte_free_tlb
+#define __pte_free_tlb(tlb, pte, address) pte_free((tlb)->mm, pte)
+#endif
+
+#ifndef __pmd_free_tlb
+#define __pmd_free_tlb(tlb, pmd, address) pmd_free((tlb)->mm, pmd)
+#endif
+
 #define tlb_remove_pmd_tlb_entry(tlb, pmdp, address)		\
 	do {							\
 		tlb->need_flush = 1;				\
