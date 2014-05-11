@@ -19,7 +19,14 @@
 #ifndef __ASM_TLB_H
 #define __ASM_TLB_H
 
+/* These defines are needed to override the defaults from asm-generic/tlb.h */
 #define  __tlb_remove_pmd_tlb_entry __tlb_remove_pmd_tlb_entry
+#define tlb_start_vma tlb_start_vma
+#define tlb_end_vma tlb_end_vma
+#define __tlb_remove_tlb_entry __tlb_remove_tlb_entry
+#define tlb_flush tlb_flush
+#define __pte_free_tlb __pte_free_tlb
+#define __pmd_free_tlb __pmd_free_tlb
 
 #include <asm-generic/tlb.h>
 
