@@ -21,5 +21,6 @@
 #define IRQ_TIMER (7)		/* Timer IRQ number of SPCT6600 */
 
 extern void interrupt_exception_vector(void);
+extern void score7_FTLB_refill_Handler(void);
 
 #endif /* _ASM_SCORE_IRQ_H */
