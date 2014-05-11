@@ -11,14 +11,6 @@ do {								\
 	flush_tlb_range(vma, vma->vm_start, vma->vm_end);	\
 } while (0)
 
-#define __tlb_remove_tlb_entry(tlb, pte, address) \
-	do { } while (0)
-
-#define tlb_flush(tlb) \
-do {								\
-	flush_tlb_mm((tlb)->mm);				\
-} while (0)
-
 #include <asm-generic/tlb.h>
 
 #endif /* _SPARC_TLB_H */
