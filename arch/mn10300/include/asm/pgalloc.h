@@ -53,4 +53,6 @@ static inline void pte_free(struct mm_struct *mm, struct page *pte)
 
 #define __pte_free_tlb(tlb, pte, addr) tlb_remove_page((tlb), (pte))
 
+extern void check_pgt_cache(void);
+
 #endif /* _ASM_PGALLOC_H */
