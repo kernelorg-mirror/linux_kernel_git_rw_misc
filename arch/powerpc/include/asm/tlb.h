@@ -25,9 +25,6 @@
 
 #include <linux/pagemap.h>
 
-#define tlb_start_vma(tlb, vma)	do { } while (0)
-#define tlb_end_vma(tlb, vma)	do { } while (0)
-
 extern void tlb_flush(struct mmu_gather *tlb);
 
 /* These defines are needed to override the defaults from asm-generic/tlb.h */
