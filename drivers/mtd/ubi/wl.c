@@ -1212,9 +1212,12 @@ static int wear_leveling_worker(struct ubi_device *ubi, struct ubi_work *wrk,
 
 	err = do_sync_erase(ubi, e1, vol_id, lnum, 0);
 	if (err) {
+		ubi->lookuptbl[e1->pnum] = NULL;
 		kmem_cache_free(ubi_wl_entry_slab, e1);
-		if (e2)
+		if (e2) {
+			ubi->lookuptbl[e2->pnum] = NULL;
 			kmem_cache_free(ubi_wl_entry_slab, e2);
+		}
 		goto out_ro;
 	}
 
@@ -1227,6 +1230,7 @@ static int wear_leveling_worker(struct ubi_device *ubi, struct ubi_work *wrk,
 		       e2->pnum, vol_id, lnum);
 		err = do_sync_erase(ubi, e2, vol_id, lnum, 0);
 		if (err) {
+			ubi->lookuptbl[e2->pnum] = NULL;
 			kmem_cache_free(ubi_wl_entry_slab, e2);
 			goto out_ro;
 		}
@@ -1266,6 +1270,7 @@ out_not_moved:
 	ubi_free_vid_hdr(ubi, vid_hdr);
 	err = do_sync_erase(ubi, e2, vol_id, lnum, torture);
 	if (err) {
+		ubi->lookuptbl[e2->pnum] = NULL;
 		kmem_cache_free(ubi_wl_entry_slab, e2);
 		goto out_ro;
 	}
@@ -1285,6 +1290,8 @@ out_error:
 	spin_unlock(&ubi->wl_lock);
 
 	ubi_free_vid_hdr(ubi, vid_hdr);
+	ubi->lookuptbl[e1->pnum] = NULL;
+	ubi->lookuptbl[e2->pnum] = NULL;
 	kmem_cache_free(ubi_wl_entry_slab, e1);
 	kmem_cache_free(ubi_wl_entry_slab, e2);
 
@@ -1428,6 +1435,7 @@ static int erase_worker(struct ubi_device *ubi, struct ubi_work *wl_wrk,
 	if (shutdown) {
 		dbg_wl("cancel erasure of PEB %d EC %d", pnum, e->ec);
 		kfree(wl_wrk);
+		ubi->lookuptbl[e->pnum] = NULL;
 		kmem_cache_free(ubi_wl_entry_slab, e);
 		return 0;
 	}
@@ -1474,6 +1482,7 @@ static int erase_worker(struct ubi_device *ubi, struct ubi_work *wl_wrk,
 		return err;
 	}
 
+	ubi->lookuptbl[e->pnum] = NULL;
 	kmem_cache_free(ubi_wl_entry_slab, e);
 	if (err != -EIO)
 		/*
@@ -1912,6 +1921,7 @@ int ubi_wl_init(struct ubi_device *ubi, struct ubi_attach_info *ai)
 		ubi_assert(!ubi_is_fm_block(ubi, e->pnum));
 		ubi->lookuptbl[e->pnum] = e;
 		if (schedule_erase(ubi, e, aeb->vol_id, aeb->lnum, 0)) {
+			ubi->lookuptbl[e->pnum] = NULL;
 			kmem_cache_free(ubi_wl_entry_slab, e);
 			goto out_free;
 		}
