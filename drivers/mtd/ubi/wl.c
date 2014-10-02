@@ -626,24 +626,34 @@ void ubi_refill_pools(struct ubi_device *ubi)
  */
 int ubi_wl_get_peb(struct ubi_device *ubi)
 {
-	int ret;
+	int ret, retried = 0;
 	struct ubi_fm_pool *pool = &ubi->fm_pool;
 	struct ubi_fm_pool *wl_pool = &ubi->fm_wl_pool;
 
-	if (!pool->size || !wl_pool->size || pool->used == pool->size ||
-	    wl_pool->used == wl_pool->size)
-		ubi_update_fastmap(ubi);
-
-	/* we got not a single free PEB */
-	if (!pool->size)
-		ret = -ENOSPC;
-	else {
-		spin_lock(&ubi->wl_lock);
-		ret = pool->pebs[pool->used++];
-		prot_queue_add(ubi, ubi->lookuptbl[ret]);
+again:
+	spin_lock(&ubi->wl_lock);
+	if (!pool->size || !wl_pool->size || pool->used >= pool->size ||
+	    wl_pool->used >= wl_pool->size) {
 		spin_unlock(&ubi->wl_lock);
+		ubi_update_fastmap(ubi);
+		spin_lock(&ubi->wl_lock);
 	}
 
+	if (pool->used >= pool->size || !pool->size) {
+		spin_unlock(&ubi->wl_lock);
+		if (retried) {
+			ubi_err("Unable to get a free PEB from user WL pool");
+			ret = -ENOSPC;
+			goto out;
+		}
+		retried = 1;
+		goto again;
+	}
+
+	ret = pool->pebs[pool->used++];
+	prot_queue_add(ubi, ubi->lookuptbl[ret]);
+	spin_unlock(&ubi->wl_lock);
+out:
 	return ret;
 }
 
