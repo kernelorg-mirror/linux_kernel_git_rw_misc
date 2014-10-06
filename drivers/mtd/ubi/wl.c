@@ -502,7 +502,30 @@ out:
  * This function returns a physical eraseblock in case of success and a
  * negative error code in case of failure.
  */
-static int __wl_get_peb(struct ubi_device *ubi)
+static struct ubi_wl_entry *wl_get_wle(struct ubi_device *ubi)
+{
+	struct ubi_wl_entry *e;
+
+	e = find_mean_wl_entry(ubi, &ubi->free);
+	if (!e) {
+		ubi_err("no free eraseblocks");
+		return NULL;
+	}
+
+	self_check_in_wl_tree(ubi, e, &ubi->free);
+
+	/*
+	 * Move the physical eraseblock to the protection queue where it will
+	 * be protected from being moved for some time.
+	 */
+	rb_erase(&e->u.rb, &ubi->free);
+	ubi->free_count--;
+	dbg_wl("PEB %d EC %d", e->pnum, e->ec);
+
+	return e;
+}
+
+static int wl_get_peb(struct ubi_device *ubi)
 {
 	int err;
 	struct ubi_wl_entry *e;
@@ -519,29 +542,12 @@ retry:
 		if (err < 0)
 			return err;
 		goto retry;
+
 	}
 
-	e = find_mean_wl_entry(ubi, &ubi->free);
-	if (!e) {
-		ubi_err("no free eraseblocks");
-		return -ENOSPC;
-	}
-
-	self_check_in_wl_tree(ubi, e, &ubi->free);
-
-	/*
-	 * Move the physical eraseblock to the protection queue where it will
-	 * be protected from being moved for some time.
-	 */
-	rb_erase(&e->u.rb, &ubi->free);
-	ubi->free_count--;
-	dbg_wl("PEB %d EC %d", e->pnum, e->ec);
-#ifndef CONFIG_MTD_UBI_FASTMAP
-	/* We have to enqueue e only if fastmap is disabled,
-	 * is fastmap enabled prot_queue_add() will be called by
-	 * ubi_wl_get_peb() after removing e from the pool. */
+	e = wl_get_wle(ubi);
 	prot_queue_add(ubi, e);
-#endif
+
 	return e->pnum;
 }
 
@@ -699,7 +705,7 @@ int ubi_wl_get_peb(struct ubi_device *ubi)
 	int peb, err;
 
 	spin_lock(&ubi->wl_lock);
-	peb = __wl_get_peb(ubi);
+	peb = wl_get_peb(ubi);
 	spin_unlock(&ubi->wl_lock);
 
 	if (peb < 0)
