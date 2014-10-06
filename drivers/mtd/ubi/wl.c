@@ -1014,9 +1014,6 @@ int ubi_wl_put_fm_peb(struct ubi_device *ubi, struct ubi_wl_entry *fm_e,
 		e = fm_e;
 		ubi_assert(e->ec >= 0);
 		ubi->lookuptbl[pnum] = e;
-	} else {
-		e->ec = fm_e->ec;
-		kfree(fm_e);
 	}
 
 	spin_unlock(&ubi->wl_lock);
@@ -2008,9 +2005,15 @@ int ubi_wl_init(struct ubi_device *ubi, struct ubi_attach_info *ai)
 
 	dbg_wl("found %i PEBs", found_pebs);
 
-	if (ubi->fm)
+	if (ubi->fm) {
 		ubi_assert(ubi->good_peb_count == \
 			   found_pebs + ubi->fm->used_blocks);
+
+		for (i = 0; i < ubi->fm->used_blocks; i++) {
+			e = ubi->fm->e[i];
+			ubi->lookuptbl[e->pnum] = e;
+		}
+	}
 	else
 		ubi_assert(ubi->good_peb_count == found_pebs);
 
