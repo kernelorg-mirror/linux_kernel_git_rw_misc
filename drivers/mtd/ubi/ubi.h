@@ -895,6 +895,42 @@ static inline int ubiblock_remove(struct ubi_volume_info *vi)
 }
 #endif
 
+/*
+ * ubi_for_each_free_peb - walk the UBI free RB tree
+ * @ubi: UBI device description object
+ * @e: a pointer to a ubi_wl_entry to use as cursor
+ * @tmp_e: a pointer to a ubi_wl_entry to use as temporary storage
+ */
+#define ubi_for_each_free_peb(ubi, e, tmp_e)	\
+	rbtree_postorder_for_each_entry_safe((e), (tmp_e), &(ubi)->free, u.rb)
+
+/*
+ * ubi_for_each_used_peb - walk the UBI used RB tree
+ * @ubi: UBI device description object
+ * @e: a pointer to a ubi_wl_entry to use as cursor
+ * @tmp_e: a pointer to a ubi_wl_entry to use as temporary storage
+ */
+#define ubi_for_each_used_peb(ubi, e, tmp_e)	\
+	rbtree_postorder_for_each_entry_safe((e), (tmp_e), &(ubi)->used, u.rb)
+
+/*
+ * ubi_for_each_scub_peb - walk the UBI scub RB tree
+ * @ubi: UBI device description object
+ * @e: a pointer to a ubi_wl_entry to use as cursor
+ * @tmp_e: a pointer to a ubi_wl_entry to use as temporary storage
+ */
+#define ubi_for_each_scrub_peb(ubi, e, tmp_e)	\
+	rbtree_postorder_for_each_entry_safe((e), (tmp_e), &(ubi)->scrub, u.rb)
+
+/*
+ * ubi_for_each_protected_peb - walk the UBI protection queue
+ * @ubi: UBI device description object
+ * @i: a integer used as counter
+ * @e: a pointer to a ubi_wl_entry to use as cursor
+ */
+#define ubi_for_each_protected_peb(ubi, i, e)	\
+	for ((i) = 0; (i) < UBI_PROT_QUEUE_LEN; (i)++)	\
+		list_for_each_entry((e), &(ubi->pq[(i)]), u.list)
 
 /*
  * ubi_rb_for_each_entry - walk an RB-tree.
