@@ -9631,6 +9631,7 @@ M:	Richard Weinberger <richard@nod.at>
 L:	linux-mtd@lists.infradead.org
 S:	Maintained
 F:	drivers/mtd/ubi/fastmap.c
+F:	drivers/mtd/ubi/fastmap-wl.c
 
 USB ACM DRIVER
 M:	Oliver Neukum <oliver@neukum.org>
