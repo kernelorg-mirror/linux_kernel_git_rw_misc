@@ -253,10 +253,10 @@ static struct ubi_wl_entry *get_peb_for_wl(struct ubi_device *ubi)
 			schedule_work(&ubi->fm_work);
 		}
 		return NULL;
-	} else {
-		pnum = pool->pebs[pool->used++];
-		return ubi->lookuptbl[pnum];
 	}
+
+	pnum = pool->pebs[pool->used++];
+	return ubi->lookuptbl[pnum];
 }
 
 /**
