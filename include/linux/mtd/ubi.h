@@ -23,10 +23,15 @@
 
 #include <linux/ioctl.h>
 #include <linux/types.h>
+#include <linux/scatterlist.h>
 #include <mtd/ubi-user.h>
 
 /* All voumes/LEBs */
 #define UBI_ALL -1
+
+/* Maximum number of scatter gather list entries,
+ * we use only 64 to have a lower memory foot print. */
+#define UBI_MAX_SG_COUNT 64
 
 /*
  * enum ubi_open_mode - UBI volume open mode constants.
@@ -113,6 +118,22 @@ struct ubi_volume_info {
 	int name_len;
 	const char *name;
 	dev_t cdev;
+};
+
+/**
+ * struct ubi_sgl - UBI scatter gather list data structure.
+ * @list_pos: current position in @sg[]
+ * @page_pos: current position in @sg[@list_pos]
+ * @sg: the scatter gather list itself
+ *
+ * ubi_sgl is a wrapper around a scatter list which keeps track of the
+ * current position in the list and the current list item such that
+ * it can be used across multiple ubi_leb_read_sg() calls.
+ */
+struct ubi_sgl {
+	int list_pos;
+	int page_pos;
+	struct scatterlist sg[UBI_MAX_SG_COUNT];
 };
 
 /**
@@ -210,6 +231,8 @@ int ubi_unregister_volume_notifier(struct notifier_block *nb);
 void ubi_close_volume(struct ubi_volume_desc *desc);
 int ubi_leb_read(struct ubi_volume_desc *desc, int lnum, char *buf, int offset,
 		 int len, int check);
+int ubi_leb_read_sg(struct ubi_volume_desc *desc, int lnum, struct ubi_sgl *sgl,
+		   int offset, int len, int check);
 int ubi_leb_write(struct ubi_volume_desc *desc, int lnum, const void *buf,
 		  int offset, int len);
 int ubi_leb_change(struct ubi_volume_desc *desc, int lnum, const void *buf,
@@ -229,5 +252,15 @@ static inline int ubi_read(struct ubi_volume_desc *desc, int lnum, char *buf,
 			   int offset, int len)
 {
 	return ubi_leb_read(desc, lnum, buf, offset, len, 0);
+}
+
+/*
+ * This function is the same as the 'ubi_leb_read_sg()' function, but it does
+ * not provide the checking capability.
+ */
+static inline int ubi_read_sg(struct ubi_volume_desc *desc, int lnum,
+			      struct ubi_sgl *sgl, int offset, int len)
+{
+	return ubi_leb_read_sg(desc, lnum, sgl, offset, len, 0);
 }
 #endif /* !__LINUX_UBI_H__ */
