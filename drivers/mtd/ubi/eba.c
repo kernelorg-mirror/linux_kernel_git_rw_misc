@@ -510,6 +510,7 @@ retry:
 	new_pnum = ubi_wl_get_peb(ubi);
 	if (new_pnum < 0) {
 		ubi_free_vid_hdr(ubi, vid_hdr);
+		up_read(&ubi->fm_sem);
 		return new_pnum;
 	}
 
@@ -520,13 +521,16 @@ retry:
 	if (err && err != UBI_IO_BITFLIPS) {
 		if (err > 0)
 			err = -EIO;
+		up_read(&ubi->fm_sem);
 		goto out_put;
 	}
 
 	vid_hdr->sqnum = cpu_to_be64(ubi_next_sqnum(ubi));
 	err = ubi_io_write_vid_hdr(ubi, new_pnum, vid_hdr);
-	if (err)
+	if (err) {
+		up_read(&ubi->fm_sem);
 		goto write_error;
+	}
 
 	data_size = offset + len;
 	mutex_lock(&ubi->buf_mutex);
@@ -535,8 +539,10 @@ retry:
 	/* Read everything before the area where the write failure happened */
 	if (offset > 0) {
 		err = ubi_io_read_data(ubi, ubi->peb_buf, pnum, 0, offset);
-		if (err && err != UBI_IO_BITFLIPS)
+		if (err && err != UBI_IO_BITFLIPS) {
+			up_read(&ubi->fm_sem);
 			goto out_unlock;
+		}
 	}
 
 	memcpy(ubi->peb_buf + offset, buf, len);
@@ -544,13 +550,13 @@ retry:
 	err = ubi_io_write_data(ubi, ubi->peb_buf, new_pnum, 0, data_size);
 	if (err) {
 		mutex_unlock(&ubi->buf_mutex);
+		up_read(&ubi->fm_sem);
 		goto write_error;
 	}
 
 	mutex_unlock(&ubi->buf_mutex);
 	ubi_free_vid_hdr(ubi, vid_hdr);
 
-	down_read(&ubi->fm_sem);
 	vol->eba_tbl[lnum] = new_pnum;
 	up_read(&ubi->fm_sem);
 	ubi_wl_put_peb(ubi, vol_id, lnum, pnum, 1);
@@ -647,6 +653,7 @@ retry:
 	if (pnum < 0) {
 		ubi_free_vid_hdr(ubi, vid_hdr);
 		leb_write_unlock(ubi, vol_id, lnum);
+		up_read(&ubi->fm_sem);
 		return pnum;
 	}
 
@@ -657,6 +664,7 @@ retry:
 	if (err) {
 		ubi_warn(ubi, "failed to write VID header to LEB %d:%d, PEB %d",
 			 vol_id, lnum, pnum);
+		up_read(&ubi->fm_sem);
 		goto write_error;
 	}
 
@@ -665,11 +673,11 @@ retry:
 		if (err) {
 			ubi_warn(ubi, "failed to write %d bytes at offset %d of LEB %d:%d, PEB %d",
 				 len, offset, vol_id, lnum, pnum);
+			up_read(&ubi->fm_sem);
 			goto write_error;
 		}
 	}
 
-	down_read(&ubi->fm_sem);
 	vol->eba_tbl[lnum] = pnum;
 	up_read(&ubi->fm_sem);
 
@@ -768,6 +776,7 @@ retry:
 	if (pnum < 0) {
 		ubi_free_vid_hdr(ubi, vid_hdr);
 		leb_write_unlock(ubi, vol_id, lnum);
+		up_read(&ubi->fm_sem);
 		return pnum;
 	}
 
@@ -778,6 +787,7 @@ retry:
 	if (err) {
 		ubi_warn(ubi, "failed to write VID header to LEB %d:%d, PEB %d",
 			 vol_id, lnum, pnum);
+		up_read(&ubi->fm_sem);
 		goto write_error;
 	}
 
@@ -785,11 +795,11 @@ retry:
 	if (err) {
 		ubi_warn(ubi, "failed to write %d bytes of data to PEB %d",
 			 len, pnum);
+		up_read(&ubi->fm_sem);
 		goto write_error;
 	}
 
 	ubi_assert(vol->eba_tbl[lnum] < 0);
-	down_read(&ubi->fm_sem);
 	vol->eba_tbl[lnum] = pnum;
 	up_read(&ubi->fm_sem);
 
@@ -886,6 +896,7 @@ retry:
 	pnum = ubi_wl_get_peb(ubi);
 	if (pnum < 0) {
 		err = pnum;
+		up_read(&ubi->fm_sem);
 		goto out_leb_unlock;
 	}
 
@@ -896,6 +907,7 @@ retry:
 	if (err) {
 		ubi_warn(ubi, "failed to write VID header to LEB %d:%d, PEB %d",
 			 vol_id, lnum, pnum);
+		up_read(&ubi->fm_sem);
 		goto write_error;
 	}
 
@@ -903,10 +915,10 @@ retry:
 	if (err) {
 		ubi_warn(ubi, "failed to write %d bytes of data to PEB %d",
 			 len, pnum);
+		up_read(&ubi->fm_sem);
 		goto write_error;
 	}
 
-	down_read(&ubi->fm_sem);
 	old_pnum = vol->eba_tbl[lnum];
 	vol->eba_tbl[lnum] = pnum;
 	up_read(&ubi->fm_sem);
