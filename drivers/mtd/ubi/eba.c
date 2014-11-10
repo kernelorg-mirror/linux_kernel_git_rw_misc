@@ -340,9 +340,9 @@ int ubi_eba_unmap_leb(struct ubi_device *ubi, struct ubi_volume *vol,
 
 	dbg_eba("erase LEB %d:%d, PEB %d", vol_id, lnum, pnum);
 
-	down_read(&ubi->fm_sem);
+	down_read(&ubi->fm_eba_sem);
 	vol->eba_tbl[lnum] = UBI_LEB_UNMAPPED;
-	up_read(&ubi->fm_sem);
+	up_read(&ubi->fm_eba_sem);
 	err = ubi_wl_put_peb(ubi, vol_id, lnum, pnum, 0);
 
 out_unlock:
@@ -510,7 +510,7 @@ retry:
 	new_pnum = ubi_wl_get_peb(ubi);
 	if (new_pnum < 0) {
 		ubi_free_vid_hdr(ubi, vid_hdr);
-		up_read(&ubi->fm_sem);
+		up_read(&ubi->fm_eba_sem);
 		return new_pnum;
 	}
 
@@ -521,14 +521,14 @@ retry:
 	if (err && err != UBI_IO_BITFLIPS) {
 		if (err > 0)
 			err = -EIO;
-		up_read(&ubi->fm_sem);
+		up_read(&ubi->fm_eba_sem);
 		goto out_put;
 	}
 
 	vid_hdr->sqnum = cpu_to_be64(ubi_next_sqnum(ubi));
 	err = ubi_io_write_vid_hdr(ubi, new_pnum, vid_hdr);
 	if (err) {
-		up_read(&ubi->fm_sem);
+		up_read(&ubi->fm_eba_sem);
 		goto write_error;
 	}
 
@@ -540,7 +540,7 @@ retry:
 	if (offset > 0) {
 		err = ubi_io_read_data(ubi, ubi->peb_buf, pnum, 0, offset);
 		if (err && err != UBI_IO_BITFLIPS) {
-			up_read(&ubi->fm_sem);
+			up_read(&ubi->fm_eba_sem);
 			goto out_unlock;
 		}
 	}
@@ -550,7 +550,7 @@ retry:
 	err = ubi_io_write_data(ubi, ubi->peb_buf, new_pnum, 0, data_size);
 	if (err) {
 		mutex_unlock(&ubi->buf_mutex);
-		up_read(&ubi->fm_sem);
+		up_read(&ubi->fm_eba_sem);
 		goto write_error;
 	}
 
@@ -558,7 +558,7 @@ retry:
 	ubi_free_vid_hdr(ubi, vid_hdr);
 
 	vol->eba_tbl[lnum] = new_pnum;
-	up_read(&ubi->fm_sem);
+	up_read(&ubi->fm_eba_sem);
 	ubi_wl_put_peb(ubi, vol_id, lnum, pnum, 1);
 
 	ubi_msg(ubi, "data was successfully recovered");
@@ -653,7 +653,7 @@ retry:
 	if (pnum < 0) {
 		ubi_free_vid_hdr(ubi, vid_hdr);
 		leb_write_unlock(ubi, vol_id, lnum);
-		up_read(&ubi->fm_sem);
+		up_read(&ubi->fm_eba_sem);
 		return pnum;
 	}
 
@@ -664,7 +664,7 @@ retry:
 	if (err) {
 		ubi_warn(ubi, "failed to write VID header to LEB %d:%d, PEB %d",
 			 vol_id, lnum, pnum);
-		up_read(&ubi->fm_sem);
+		up_read(&ubi->fm_eba_sem);
 		goto write_error;
 	}
 
@@ -673,13 +673,13 @@ retry:
 		if (err) {
 			ubi_warn(ubi, "failed to write %d bytes at offset %d of LEB %d:%d, PEB %d",
 				 len, offset, vol_id, lnum, pnum);
-			up_read(&ubi->fm_sem);
+			up_read(&ubi->fm_eba_sem);
 			goto write_error;
 		}
 	}
 
 	vol->eba_tbl[lnum] = pnum;
-	up_read(&ubi->fm_sem);
+	up_read(&ubi->fm_eba_sem);
 
 	leb_write_unlock(ubi, vol_id, lnum);
 	ubi_free_vid_hdr(ubi, vid_hdr);
@@ -776,7 +776,7 @@ retry:
 	if (pnum < 0) {
 		ubi_free_vid_hdr(ubi, vid_hdr);
 		leb_write_unlock(ubi, vol_id, lnum);
-		up_read(&ubi->fm_sem);
+		up_read(&ubi->fm_eba_sem);
 		return pnum;
 	}
 
@@ -787,7 +787,7 @@ retry:
 	if (err) {
 		ubi_warn(ubi, "failed to write VID header to LEB %d:%d, PEB %d",
 			 vol_id, lnum, pnum);
-		up_read(&ubi->fm_sem);
+		up_read(&ubi->fm_eba_sem);
 		goto write_error;
 	}
 
@@ -795,13 +795,13 @@ retry:
 	if (err) {
 		ubi_warn(ubi, "failed to write %d bytes of data to PEB %d",
 			 len, pnum);
-		up_read(&ubi->fm_sem);
+		up_read(&ubi->fm_eba_sem);
 		goto write_error;
 	}
 
 	ubi_assert(vol->eba_tbl[lnum] < 0);
 	vol->eba_tbl[lnum] = pnum;
-	up_read(&ubi->fm_sem);
+	up_read(&ubi->fm_eba_sem);
 
 	leb_write_unlock(ubi, vol_id, lnum);
 	ubi_free_vid_hdr(ubi, vid_hdr);
@@ -896,7 +896,7 @@ retry:
 	pnum = ubi_wl_get_peb(ubi);
 	if (pnum < 0) {
 		err = pnum;
-		up_read(&ubi->fm_sem);
+		up_read(&ubi->fm_eba_sem);
 		goto out_leb_unlock;
 	}
 
@@ -907,7 +907,7 @@ retry:
 	if (err) {
 		ubi_warn(ubi, "failed to write VID header to LEB %d:%d, PEB %d",
 			 vol_id, lnum, pnum);
-		up_read(&ubi->fm_sem);
+		up_read(&ubi->fm_eba_sem);
 		goto write_error;
 	}
 
@@ -915,13 +915,13 @@ retry:
 	if (err) {
 		ubi_warn(ubi, "failed to write %d bytes of data to PEB %d",
 			 len, pnum);
-		up_read(&ubi->fm_sem);
+		up_read(&ubi->fm_eba_sem);
 		goto write_error;
 	}
 
 	old_pnum = vol->eba_tbl[lnum];
 	vol->eba_tbl[lnum] = pnum;
-	up_read(&ubi->fm_sem);
+	up_read(&ubi->fm_eba_sem);
 
 	if (old_pnum >= 0) {
 		err = ubi_wl_put_peb(ubi, vol_id, lnum, old_pnum, 0);
@@ -1174,9 +1174,9 @@ int ubi_eba_copy_leb(struct ubi_device *ubi, int from, int to,
 	}
 
 	ubi_assert(vol->eba_tbl[lnum] == from);
-	down_read(&ubi->fm_sem);
+	down_read(&ubi->fm_eba_sem);
 	vol->eba_tbl[lnum] = to;
-	up_read(&ubi->fm_sem);
+	up_read(&ubi->fm_eba_sem);
 
 out_unlock_buf:
 	mutex_unlock(&ubi->buf_mutex);
