@@ -39,7 +39,10 @@ static struct ubi_wl_entry *find_anchor_wl_entry(struct rb_root *root)
 	int max_ec = UBI_MAX_ERASECOUNTER;
 
 	ubi_rb_for_each_entry(p, e, root, u.rb) {
-		if (e->pnum < UBI_FM_MAX_START && e->ec < max_ec) {
+		if (e->pnum >= UBI_FM_MAX_START)
+			break;
+
+		if (e->ec < max_ec) {
 			victim = e;
 			max_ec = e->ec;
 		}
@@ -74,6 +77,8 @@ static int anchor_pebs_avalible(struct rb_root *root)
 	ubi_rb_for_each_entry(p, e, root, u.rb)
 		if (e->pnum < UBI_FM_MAX_START)
 			return 1;
+		else
+			break;
 
 	return 0;
 }
