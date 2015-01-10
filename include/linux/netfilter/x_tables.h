@@ -331,14 +331,15 @@ static inline void xt_write_recseq_end(unsigned int addend)
 /*
  * This helper is performance critical and must be inlined
  */
-static inline unsigned long ifname_compare_aligned(const char *_a,
-						   const char *_b,
-						   const char *_mask)
+static inline unsigned long ifname_compare(const char *_a,
+					   const char *_b,
+					   const char *_mask)
 {
+	unsigned long ret;
+#ifdef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
 	const unsigned long *a = (const unsigned long *)_a;
 	const unsigned long *b = (const unsigned long *)_b;
 	const unsigned long *mask = (const unsigned long *)_mask;
-	unsigned long ret;
 
 	ret = (a[0] ^ b[0]) & mask[0];
 	if (IFNAMSIZ > sizeof(unsigned long))
@@ -348,11 +349,21 @@ static inline unsigned long ifname_compare_aligned(const char *_a,
 	if (IFNAMSIZ > 3 * sizeof(unsigned long))
 		ret |= (a[3] ^ b[3]) & mask[3];
 	BUILD_BUG_ON(IFNAMSIZ > 4 * sizeof(unsigned long));
+#else
+	const u16 *a = (const u16 *)_a;
+	const u16 *b = (const u16 *)_b;
+	const u16 *mask = (const u16 *)_mask;
+	int i;
+
+	ret = 0;
+	for (i = 0; i < IFNAMSIZ/sizeof(u16); i++)
+		ret |= (a[i] ^ b[i]) & mask[i];
+#endif
 	return ret;
 }
 
 /*
- * A wrapper around ifname_compare_aligned() to match against dev->name and
+ * A wrapper around ifname_compare() to match against dev->name and
  * dev->ifalias.
  */
 static inline unsigned long ifname_compare_all(const struct net_device *dev,
@@ -364,9 +375,9 @@ static inline unsigned long ifname_compare_all(const struct net_device *dev,
 	if (!dev)
 		goto out;
 
-	res = ifname_compare_aligned(dev->name, name, mask);
+	res = ifname_compare(dev->name, name, mask);
 	if (unlikely(dev->ifalias && res))
-		res = ifname_compare_aligned(dev->ifalias, name, mask);
+		res = ifname_compare(dev->ifalias, name, mask);
 
 out:
 	return res;

@@ -76,39 +76,6 @@ static inline int arp_devaddr_compare(const struct arpt_devaddr_info *ap,
 	return ret != 0;
 }
 
-/*
- * Unfortunately, _b and _mask are not aligned to an int (or long int)
- * Some arches dont care, unrolling the loop is a win on them.
- * For other arches, we only have a 16bit alignement.
- */
-static unsigned long ifname_compare(const struct net_device *dev,
-				    const char *_b, const char *_mask)
-{
-#ifdef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
-	unsigned long ret = ifname_compare_all(dev, _b, _mask);
-#else
-	unsigned long ret = 0;
-	const u16 *a = (const u16 *)dev->name;
-	const u16 *b = (const u16 *)_b;
-	const u16 *mask = (const u16 *)_mask;
-	int i;
-
-	for (i = 0; i < IFNAMSIZ/sizeof(u16); i++)
-		ret |= (a[i] ^ b[i]) & mask[i];
-
-	if (likely(!(dev->ifalias && ret)))
-		goto out;
-
-	ret = 0;
-	a = (const u16 *)dev->ifalias;
-	for (i = 0; i < IFNAMSIZ/sizeof(u16); i++)
-		ret |= (a[i] ^ b[i]) & mask[i];
-
-out:
-#endif
-	return ret;
-}
-
 /* Returns whether packet matches rule or not. */
 static inline int arp_packet_match(const struct arphdr *arphdr,
 				   struct net_device *dev,
@@ -192,7 +159,7 @@ static inline int arp_packet_match(const struct arphdr *arphdr,
 	}
 
 	/* Look for ifname matches.  */
-	ret = ifname_compare(indev, arpinfo->iniface, arpinfo->iniface_mask);
+	ret = ifname_compare_all(indev, arpinfo->iniface, arpinfo->iniface_mask);
 
 	if (FWINV(ret != 0, ARPT_INV_VIA_IN)) {
 		dprintf("VIA in mismatch (%s vs %s).%s\n",
@@ -201,7 +168,7 @@ static inline int arp_packet_match(const struct arphdr *arphdr,
 		return 0;
 	}
 
-	ret = ifname_compare(outdev, arpinfo->outiface, arpinfo->outiface_mask);
+	ret = ifname_compare_all(outdev, arpinfo->outiface, arpinfo->outiface_mask);
 
 	if (FWINV(ret != 0, ARPT_INV_VIA_OUT)) {
 		dprintf("VIA out mismatch (%s vs %s).%s\n",
