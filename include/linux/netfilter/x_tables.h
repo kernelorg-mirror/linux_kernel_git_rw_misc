@@ -351,6 +351,28 @@ static inline unsigned long ifname_compare_aligned(const char *_a,
 	return ret;
 }
 
+/*
+ * A wrapper around ifname_compare_aligned() to match against dev->name and
+ * dev->ifalias.
+ */
+static inline unsigned long ifname_compare_all(const struct net_device *dev,
+					       const char *name,
+					       const char *mask)
+{
+	unsigned long res = 0;
+
+	if (!dev)
+		goto out;
+
+	res = ifname_compare_aligned(dev->name, name, mask);
+	if (unlikely(dev->ifalias && res))
+		res = ifname_compare_aligned(dev->ifalias, name, mask);
+
+out:
+	return res;
+}
+
+
 struct nf_hook_ops *xt_hook_link(const struct xt_table *, nf_hookfn *);
 void xt_hook_unlink(const struct xt_table *, struct nf_hook_ops *);
 

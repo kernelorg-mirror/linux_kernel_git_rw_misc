@@ -83,8 +83,8 @@ EXPORT_SYMBOL_GPL(ip6t_alloc_initial_table);
 /* Performance critical - called for every packet */
 static inline bool
 ip6_packet_match(const struct sk_buff *skb,
-		 const char *indev,
-		 const char *outdev,
+		 const struct net_device *indev,
+		 const struct net_device *outdev,
 		 const struct ip6t_ip6 *ip6info,
 		 unsigned int *protoff,
 		 int *fragoff, bool *hotdrop)
@@ -109,7 +109,7 @@ ip6_packet_match(const struct sk_buff *skb,
 		return false;
 	}
 
-	ret = ifname_compare_aligned(indev, ip6info->iniface, ip6info->iniface_mask);
+	ret = ifname_compare_all(indev, ip6info->iniface, ip6info->iniface_mask);
 
 	if (FWINV(ret != 0, IP6T_INV_VIA_IN)) {
 		dprintf("VIA in mismatch (%s vs %s).%s\n",
@@ -118,7 +118,7 @@ ip6_packet_match(const struct sk_buff *skb,
 		return false;
 	}
 
-	ret = ifname_compare_aligned(outdev, ip6info->outiface, ip6info->outiface_mask);
+	ret = ifname_compare_all(outdev, ip6info->outiface, ip6info->outiface_mask);
 
 	if (FWINV(ret != 0, IP6T_INV_VIA_OUT)) {
 		dprintf("VIA out mismatch (%s vs %s).%s\n",
@@ -318,10 +318,8 @@ ip6t_do_table(struct sk_buff *skb,
 	      const struct net_device *out,
 	      struct xt_table *table)
 {
-	static const char nulldevname[IFNAMSIZ] __attribute__((aligned(sizeof(long))));
 	/* Initializing verdict to NF_DROP keeps gcc happy. */
 	unsigned int verdict = NF_DROP;
-	const char *indev, *outdev;
 	const void *table_base;
 	struct ip6t_entry *e, **jumpstack;
 	unsigned int *stackptr, origptr, cpu;
@@ -329,10 +327,8 @@ ip6t_do_table(struct sk_buff *skb,
 	struct xt_action_param acpar;
 	unsigned int addend;
 
-	/* Initialization */
-	indev = in ? in->name : nulldevname;
-	outdev = out ? out->name : nulldevname;
-	/* We handle fragments by dealing with the first fragment as
+	/* Initialization:
+	 * We handle fragments by dealing with the first fragment as
 	 * if it was a normal packet.  All other fragments are treated
 	 * normally, except that they will NEVER match rules that ask
 	 * things we don't know, ie. tcp syn flag or ports).  If the
@@ -368,7 +364,7 @@ ip6t_do_table(struct sk_buff *skb,
 
 		IP_NF_ASSERT(e);
 		acpar.thoff = 0;
-		if (!ip6_packet_match(skb, indev, outdev, &e->ipv6,
+		if (!ip6_packet_match(skb, in, out, &e->ipv6,
 		    &acpar.thoff, &acpar.fragoff, &acpar.hotdrop)) {
  no_match:
 			e = ip6t_next_entry(e);

@@ -73,8 +73,8 @@ EXPORT_SYMBOL_GPL(ipt_alloc_initial_table);
 /* Performance critical - called for every packet */
 static inline bool
 ip_packet_match(const struct iphdr *ip,
-		const char *indev,
-		const char *outdev,
+		const struct net_device *indev,
+		const struct net_device *outdev,
 		const struct ipt_ip *ipinfo,
 		int isfrag)
 {
@@ -97,7 +97,7 @@ ip_packet_match(const struct iphdr *ip,
 		return false;
 	}
 
-	ret = ifname_compare_aligned(indev, ipinfo->iniface, ipinfo->iniface_mask);
+	ret = ifname_compare_all(indev, ipinfo->iniface, ipinfo->iniface_mask);
 
 	if (FWINV(ret != 0, IPT_INV_VIA_IN)) {
 		dprintf("VIA in mismatch (%s vs %s).%s\n",
@@ -106,7 +106,7 @@ ip_packet_match(const struct iphdr *ip,
 		return false;
 	}
 
-	ret = ifname_compare_aligned(outdev, ipinfo->outiface, ipinfo->outiface_mask);
+	ret = ifname_compare_all(outdev, ipinfo->outiface, ipinfo->outiface_mask);
 
 	if (FWINV(ret != 0, IPT_INV_VIA_OUT)) {
 		dprintf("VIA out mismatch (%s vs %s).%s\n",
@@ -292,11 +292,9 @@ ipt_do_table(struct sk_buff *skb,
 	     const struct net_device *out,
 	     struct xt_table *table)
 {
-	static const char nulldevname[IFNAMSIZ] __attribute__((aligned(sizeof(long))));
 	const struct iphdr *ip;
 	/* Initializing verdict to NF_DROP keeps gcc happy. */
 	unsigned int verdict = NF_DROP;
-	const char *indev, *outdev;
 	const void *table_base;
 	struct ipt_entry *e, **jumpstack;
 	unsigned int *stackptr, origptr, cpu;
@@ -306,8 +304,6 @@ ipt_do_table(struct sk_buff *skb,
 
 	/* Initialization */
 	ip = ip_hdr(skb);
-	indev = in ? in->name : nulldevname;
-	outdev = out ? out->name : nulldevname;
 	/* We handle fragments by dealing with the first fragment as
 	 * if it was a normal packet.  All other fragments are treated
 	 * normally, except that they will NEVER match rules that ask
@@ -348,8 +344,7 @@ ipt_do_table(struct sk_buff *skb,
 		const struct xt_entry_match *ematch;
 
 		IP_NF_ASSERT(e);
-		if (!ip_packet_match(ip, indev, outdev,
-		    &e->ip, acpar.fragoff)) {
+		if (!ip_packet_match(ip, in, out, &e->ip, acpar.fragoff)) {
  no_match:
 			e = ipt_next_entry(e);
 			continue;

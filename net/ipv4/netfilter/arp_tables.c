@@ -81,19 +81,30 @@ static inline int arp_devaddr_compare(const struct arpt_devaddr_info *ap,
  * Some arches dont care, unrolling the loop is a win on them.
  * For other arches, we only have a 16bit alignement.
  */
-static unsigned long ifname_compare(const char *_a, const char *_b, const char *_mask)
+static unsigned long ifname_compare(const struct net_device *dev,
+				    const char *_b, const char *_mask)
 {
 #ifdef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
-	unsigned long ret = ifname_compare_aligned(_a, _b, _mask);
+	unsigned long ret = ifname_compare_all(dev, _b, _mask);
 #else
 	unsigned long ret = 0;
-	const u16 *a = (const u16 *)_a;
+	const u16 *a = (const u16 *)dev->name;
 	const u16 *b = (const u16 *)_b;
 	const u16 *mask = (const u16 *)_mask;
 	int i;
 
 	for (i = 0; i < IFNAMSIZ/sizeof(u16); i++)
 		ret |= (a[i] ^ b[i]) & mask[i];
+
+	if (likely(!(dev->ifalias && ret)))
+		goto out;
+
+	ret = 0;
+	a = (const u16 *)dev->ifalias;
+	for (i = 0; i < IFNAMSIZ/sizeof(u16); i++)
+		ret |= (a[i] ^ b[i]) & mask[i];
+
+out:
 #endif
 	return ret;
 }
@@ -101,8 +112,8 @@ static unsigned long ifname_compare(const char *_a, const char *_b, const char *
 /* Returns whether packet matches rule or not. */
 static inline int arp_packet_match(const struct arphdr *arphdr,
 				   struct net_device *dev,
-				   const char *indev,
-				   const char *outdev,
+				   const struct net_device *indev,
+				   const struct net_device *outdev,
 				   const struct arpt_arp *arpinfo)
 {
 	const char *arpptr = (char *)(arphdr + 1);
@@ -252,11 +263,9 @@ unsigned int arpt_do_table(struct sk_buff *skb,
 			   const struct net_device *out,
 			   struct xt_table *table)
 {
-	static const char nulldevname[IFNAMSIZ] __attribute__((aligned(sizeof(long))));
 	unsigned int verdict = NF_DROP;
 	const struct arphdr *arp;
 	struct arpt_entry *e, *back;
-	const char *indev, *outdev;
 	void *table_base;
 	const struct xt_table_info *private;
 	struct xt_action_param acpar;
@@ -264,9 +273,6 @@ unsigned int arpt_do_table(struct sk_buff *skb,
 
 	if (!pskb_may_pull(skb, arp_hdr_len(skb->dev)))
 		return NF_DROP;
-
-	indev = in ? in->name : nulldevname;
-	outdev = out ? out->name : nulldevname;
 
 	local_bh_disable();
 	addend = xt_write_recseq_begin();
@@ -291,7 +297,7 @@ unsigned int arpt_do_table(struct sk_buff *skb,
 	do {
 		const struct xt_entry_target *t;
 
-		if (!arp_packet_match(arp, skb->dev, indev, outdev, &e->arp)) {
+		if (!arp_packet_match(arp, skb->dev, in, out, &e->arp)) {
 			e = arpt_next_entry(e);
 			continue;
 		}

@@ -25,10 +25,8 @@ MODULE_ALIAS("ip6t_physdev");
 static bool
 physdev_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
-	static const char nulldevname[IFNAMSIZ] __attribute__((aligned(sizeof(long))));
 	const struct xt_physdev_info *info = par->matchinfo;
 	unsigned long ret;
-	const char *indev, *outdev;
 	const struct nf_bridge_info *nf_bridge;
 
 	/* Not a bridged IP packet or no info available yet:
@@ -68,8 +66,7 @@ physdev_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 	if (!(info->bitmask & XT_PHYSDEV_OP_IN))
 		goto match_outdev;
-	indev = nf_bridge->physindev ? nf_bridge->physindev->name : nulldevname;
-	ret = ifname_compare_aligned(indev, info->physindev, info->in_mask);
+	ret = ifname_compare_all(nf_bridge->physindev, info->physindev, info->in_mask);
 
 	if (!ret ^ !(info->invert & XT_PHYSDEV_OP_IN))
 		return false;
@@ -77,9 +74,7 @@ physdev_mt(const struct sk_buff *skb, struct xt_action_param *par)
 match_outdev:
 	if (!(info->bitmask & XT_PHYSDEV_OP_OUT))
 		return true;
-	outdev = nf_bridge->physoutdev ?
-		 nf_bridge->physoutdev->name : nulldevname;
-	ret = ifname_compare_aligned(outdev, info->physoutdev, info->out_mask);
+	ret = ifname_compare_all(nf_bridge->physoutdev, info->physoutdev, info->out_mask);
 
 	return (!!ret ^ !(info->invert & XT_PHYSDEV_OP_OUT));
 }
