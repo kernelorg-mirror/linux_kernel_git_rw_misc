@@ -1493,6 +1493,7 @@ struct net_device {
 	char			name[IFNAMSIZ];
 	struct hlist_node	name_hlist;
 	char 			*ifalias;
+	struct hlist_node	ifalias_hlist;
 	/*
 	 *	I/O specific fields
 	 *	FIXME: Merge these and struct ifmap into one

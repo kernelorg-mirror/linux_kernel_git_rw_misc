@@ -202,6 +202,13 @@ static inline struct hlist_head *dev_index_hash(struct net *net, int ifindex)
 	return &net->dev_index_head[ifindex & (NETDEV_HASHENTRIES - 1)];
 }
 
+static inline struct hlist_head *dev_ifalias_hash(struct net *net, const char *ifalias)
+{
+	unsigned int hash = full_name_hash(ifalias, strnlen(ifalias, IFALIASZ));
+
+	return &net->dev_ifalias_head[hash_32(hash, NETDEV_HASHBITS)];
+}
+
 static inline void rps_lock(struct softnet_data *sd)
 {
 #ifdef CONFIG_RPS
@@ -228,6 +235,9 @@ static void list_netdevice(struct net_device *dev)
 	hlist_add_head_rcu(&dev->name_hlist, dev_name_hash(net, dev->name));
 	hlist_add_head_rcu(&dev->index_hlist,
 			   dev_index_hash(net, dev->ifindex));
+	if (dev->ifalias)
+		hlist_add_head_rcu(&dev->ifalias_hlist,
+			   dev_ifalias_hash(net, dev->ifalias));
 	write_unlock_bh(&dev_base_lock);
 
 	dev_base_seq_inc(net);
@@ -245,6 +255,8 @@ static void unlist_netdevice(struct net_device *dev)
 	list_del_rcu(&dev->dev_list);
 	hlist_del_rcu(&dev->name_hlist);
 	hlist_del_rcu(&dev->index_hlist);
+	if (dev->ifalias)
+		hlist_del_rcu(&dev->ifalias_hlist);
 	write_unlock_bh(&dev_base_lock);
 
 	dev_base_seq_inc(dev_net(dev));
@@ -679,6 +691,11 @@ struct net_device *__dev_get_by_name(struct net *net, const char *name)
 		if (!strncmp(dev->name, name, IFNAMSIZ))
 			return dev;
 
+	head = dev_ifalias_hash(net, name);
+	hlist_for_each_entry(dev, head, ifalias_hlist)
+		if (dev->ifalias && !strncmp(dev->ifalias, name, IFALIASZ))
+			return dev;
+
 	return NULL;
 }
 EXPORT_SYMBOL(__dev_get_by_name);
@@ -702,6 +719,11 @@ struct net_device *dev_get_by_name_rcu(struct net *net, const char *name)
 
 	hlist_for_each_entry_rcu(dev, head, name_hlist)
 		if (!strncmp(dev->name, name, IFNAMSIZ))
+			return dev;
+
+	head = dev_ifalias_hash(net, name);
+	hlist_for_each_entry_rcu(dev, head, ifalias_hlist)
+		if (dev->ifalias && !strncmp(dev->ifalias, name, IFALIASZ))
 			return dev;
 
 	return NULL;
@@ -1169,6 +1191,20 @@ rollback:
 	return err;
 }
 
+static void __hlist_del_alias(struct net_device *dev)
+{
+	write_lock_bh(&dev_base_lock);
+	hlist_del_rcu(&dev->ifalias_hlist);
+	write_unlock_bh(&dev_base_lock);
+}
+
+static void __hlist_add_alias(struct net_device *dev)
+{
+	write_lock_bh(&dev_base_lock);
+	hlist_add_head_rcu(&dev->ifalias_hlist, dev_ifalias_hash(dev_net(dev), dev->ifalias));
+	write_unlock_bh(&dev_base_lock);
+}
+
 /**
  *	dev_set_alias - change ifalias of a device
  *	@dev: device
@@ -1189,15 +1225,24 @@ int dev_set_alias(struct net_device *dev, const char *alias, size_t len)
 	if (!len) {
 		kfree(dev->ifalias);
 		dev->ifalias = NULL;
+		__hlist_del_alias(dev);
 		return 0;
 	}
 
 	new_ifalias = krealloc(dev->ifalias, len + 1, GFP_KERNEL);
 	if (!new_ifalias)
 		return -ENOMEM;
+
+	if (dev->ifalias) {
+		__hlist_del_alias(dev);
+		synchronize_rcu();
+	}
+
 	dev->ifalias = new_ifalias;
 
 	strlcpy(dev->ifalias, alias, len+1);
+	__hlist_add_alias(dev);
+
 	return len;
 }
 
@@ -7150,8 +7195,14 @@ static int __net_init netdev_init(struct net *net)
 	if (net->dev_index_head == NULL)
 		goto err_idx;
 
+	net->dev_ifalias_head = netdev_create_hash();
+	if (net->dev_ifalias_head == NULL)
+		goto err_alias;
+
 	return 0;
 
+err_alias:
+	kfree(net->dev_index_head);
 err_idx:
 	kfree(net->dev_name_head);
 err_name:
