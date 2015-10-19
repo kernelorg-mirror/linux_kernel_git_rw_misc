@@ -477,6 +477,8 @@ static int sync_erase(struct ubi_device *ubi, struct ubi_wl_entry *e,
 	if (err < 0)
 		goto out_free;
 
+	e->rc = 0;
+
 	ec += err;
 	if (ec > UBI_MAX_ERASECOUNTER) {
 		/*
@@ -1350,6 +1352,25 @@ retry:
 	 * by the WL worker.
 	 */
 	return ensure_wear_leveling(ubi, 0);
+}
+
+void ubi_wl_update_rc(struct ubi_device *ubi, int pnum)
+{
+	struct ubi_wl_entry *e;
+
+	/*
+	 * WL not initialized yet.
+	 */
+	if (!ubi->lookuptbl)
+		return;
+
+	spin_lock(&ubi->wl_lock);
+	e = ubi->lookuptbl[pnum];
+	if (e) {
+		e->rc++;
+		ubi_assert(e->rc > 0);
+	}
+	spin_unlock(&ubi->wl_lock);
 }
 
 static int scub_possible(struct ubi_device *ubi, struct ubi_wl_entry *e)
