@@ -102,6 +102,7 @@
 #include <linux/crc32.h>
 #include <linux/freezer.h>
 #include <linux/kthread.h>
+#include <linux/uaccess.h>
 #include "ubi.h"
 #include "wl.h"
 
@@ -1366,11 +1367,65 @@ void ubi_wl_update_rc(struct ubi_device *ubi, int pnum)
 
 	spin_lock(&ubi->wl_lock);
 	e = ubi->lookuptbl[pnum];
-	if (e) {
+	if (e)
 		e->rc++;
-		ubi_assert(e->rc > 0);
+	spin_unlock(&ubi->wl_lock);
+}
+
+static void ubi_wl_fill_stats_entry(struct ubi_device *ubi,
+				    struct ubi_stats_entry *se, int pnum)
+{
+	struct ubi_wl_entry *e;
+
+	spin_lock(&ubi->wl_lock);
+	se->pnum = pnum;
+	e = ubi->lookuptbl[pnum];
+	if (e) {
+		se->ec = e->ec;
+		se->rc = e->rc;
+	} else {
+		se->ec = se->rc = -1;
 	}
 	spin_unlock(&ubi->wl_lock);
+}
+
+int ubi_wl_report_stats(struct ubi_device *ubi, struct ubi_stats_req *req,
+			struct ubi_stats_entry __user *se)
+{
+	int i, pnum, peb_end, peb_start;
+	struct ubi_stats_entry tmp_se;
+	size_t write_len;
+
+	pnum = req->req_pnum;
+	if (pnum != -1) {
+		if (pnum < 0 || pnum >= ubi->peb_count)
+			return -EINVAL;
+
+		peb_start = pnum;
+		peb_end = pnum + 1;
+		write_len = sizeof(*se);
+	} else {
+		peb_start = 0;
+		peb_end = ubi->peb_count;
+		write_len = sizeof(*se) * ubi->peb_count;
+	}
+
+	if (write_len != req->req_len - sizeof(*req))
+		return -EFAULT;
+
+	if (!access_ok(VERIFY_WRITE, se, req->req_len - sizeof(*req) + write_len))
+		return -EFAULT;
+
+	for (i = peb_start; i < peb_end; i++) {
+		ubi_wl_fill_stats_entry(ubi, &tmp_se, i);
+
+		if (__copy_to_user(se, &tmp_se, sizeof(tmp_se)))
+			return -EFAULT;
+
+		se++;
+	}
+
+	return 0;
 }
 
 static int scub_possible(struct ubi_device *ubi, struct ubi_wl_entry *e)
