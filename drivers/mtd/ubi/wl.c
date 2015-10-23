@@ -1430,7 +1430,7 @@ int ubi_wl_report_stats(struct ubi_device *ubi, struct ubi_stats_req *req,
 	return n;
 }
 
-static int scub_possible(struct ubi_device *ubi, struct ubi_wl_entry *e)
+static int scrub_possible(struct ubi_device *ubi, struct ubi_wl_entry *e)
 {
 	if (in_wl_tree(e, &ubi->scrub))
 		return -EBUSY;
@@ -1490,7 +1490,7 @@ int ubi_bitrot_check(struct ubi_device *ubi, int pnum, int force_scrub)
 	 * Does it make sense to check this PEB?
 	 * Maybe UBI is already inspecing it...
 	 */
-	err = scub_possible(ubi, e);
+	err = scrub_possible(ubi, e);
 	spin_unlock(&ubi->wl_lock);
 	if (err)
 		goto out_unlock;
@@ -1510,7 +1510,7 @@ int ubi_bitrot_check(struct ubi_device *ubi, int pnum, int force_scrub)
 		/*
 		 * Need to re-check state
 		 */
-		err = scub_possible(ubi, e);
+		err = scrub_possible(ubi, e);
 		if (err) {
 			spin_unlock(&ubi->wl_lock);
 			goto out_unlock;
