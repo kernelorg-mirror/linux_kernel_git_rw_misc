@@ -302,6 +302,8 @@ int dbg_check_nondata_nodes_order(struct ubifs_info *c, struct list_head *head);
 
 int dbg_leb_write(struct ubifs_info *c, int lnum, const void *buf, int offs,
 		  int len);
+int dbg_ptr_write(struct ubifs_info *c, struct ubi_ptr *ptr, const void *buf,
+		  int len);
 int dbg_leb_change(struct ubifs_info *c, int lnum, const void *buf, int len);
 int dbg_leb_unmap(struct ubifs_info *c, int lnum);
 int dbg_leb_map(struct ubifs_info *c, int lnum);

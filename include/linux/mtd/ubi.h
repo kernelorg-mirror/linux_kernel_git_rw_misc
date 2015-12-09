@@ -231,6 +231,51 @@ struct ubi_notification {
 	struct ubi_volume_info vi;
 };
 
+#define UBI_PTR_CHECK		BIT(0)
+#define UBI_PTR_SECURE_MODE	BIT(1)
+
+struct ubi_ptr {
+	struct ubi_volume_desc *desc;
+	int lnum;
+	int offset;
+	unsigned options;
+
+};
+
+static inline void ubi_ptr_init(struct ubi_ptr *ptr,
+				struct ubi_volume_desc *desc,
+				unsigned options)
+{
+	if (!ptr)
+		return;
+
+	memset(ptr, 0, sizeof(*ptr));
+	ptr->desc = desc;
+	ptr->options = options;
+}
+
+static inline void ubi_ptr_seek(struct ubi_ptr *ptr,
+				int lnum, int offset)
+{
+	if (!ptr)
+		return;
+
+	ptr->lnum = lnum;
+	ptr->offset = offset;
+}
+
+static inline bool ubi_ptr_is_secure(struct ubi_ptr *ptr)
+{
+	return ptr->options & UBI_PTR_SECURE_MODE;
+}
+
+int ubi_ptr_skip_len(struct ubi_ptr *ptr);
+int ubi_ptr_find_contiguous(struct ubi_ptr *ptr, int len);
+int ubi_ptr_contiguous_len(struct ubi_ptr *ptr);
+int ubi_ptr_adjust_offset(struct ubi_ptr *ptr, int offset);
+int ubi_ptr_read(struct ubi_ptr *ptr, void *buf, int len);
+int ubi_ptr_write(struct ubi_ptr *ptr, const void *buf, int len);
+
 /**
  * struct ubi_wptr - UBI write pointer structure.
  * @desc: UBI volume desc attached to this write pointer

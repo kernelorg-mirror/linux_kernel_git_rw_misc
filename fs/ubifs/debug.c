@@ -2590,6 +2590,28 @@ int dbg_leb_write(struct ubifs_info *c, int lnum, const void *buf,
 	return 0;
 }
 
+int dbg_ptr_write(struct ubifs_info *c, struct ubi_ptr *ptr, const void *buf,
+		  int len)
+{
+	int err, failing;
+
+	if (dbg_is_power_cut(c))
+		return -EROFS;
+
+	failing = power_cut_emulated(c, ptr->lnum, 1);
+	if (failing) {
+		len = corrupt_data(c, buf, len);
+		ubifs_warn(c, "actually write %d bytes to LEB %d:%d (the buffer was corrupted)",
+			   len, ptr->lnum, ptr->offset);
+	}
+	err = ubi_ptr_write(ptr, buf, len);
+	if (err)
+		return err;
+	if (failing)
+		return -EROFS;
+	return 0;
+}
+
 int dbg_leb_change(struct ubifs_info *c, int lnum, const void *buf,
 		   int len)
 {
