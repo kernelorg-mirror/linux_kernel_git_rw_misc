@@ -320,14 +320,6 @@ void mtd_wunit_to_pairing_info(struct mtd_info *mtd, int wunit,
 int mtd_pairing_info_to_wunit(struct mtd_info *mtd,
 			      const struct nand_pairing_info *info);
 int mtd_pairing_groups_per_eb(struct mtd_info *mtd);
-
-static inline int mtd_pairing_pairs_per_eb(struct mtd_info *mtd)
-{
-	int nwunits = mtd->erasesize / mtd->writesize;
-
-	return nwunits / mtd_pairing_groups_per_eb(mtd);
-}
-
 int mtd_erase(struct mtd_info *mtd, struct erase_info *instr);
 int mtd_point(struct mtd_info *mtd, loff_t from, size_t len, size_t *retlen,
 	      void **virt, resource_size_t *phys);

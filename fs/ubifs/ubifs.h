@@ -704,7 +704,6 @@ struct ubifs_wbuf {
 	unsigned int no_timer:1;
 	unsigned int need_sync:1;
 	struct ubi_wptr *wptr;
-	struct ubi_ptr ptr;
 	int next_ino;
 	ino_t *inodes;
 };
@@ -1486,8 +1485,6 @@ void ubifs_ro_mode(struct ubifs_info *c, int err);
 int ubifs_leb_read(const struct ubifs_info *c, int lnum, void *buf, int offs,
 		   int len, int even_ebadmsg);
 int ubifs_leb_write(struct ubifs_info *c, int lnum, const void *buf, int offs,
-		    int len);
-int ubifs_ptr_write(struct ubifs_info *c, struct ubi_ptr *ptr, const void *buf,
 		    int len);
 int ubifs_leb_change(struct ubifs_info *c, int lnum, const void *buf, int len);
 int ubifs_leb_unmap(struct ubifs_info *c, int lnum);
