@@ -570,6 +570,7 @@ void ubi_free_internal_volumes(struct ubi_device *ubi)
 	for (i = ubi->vtbl_slots;
 	     i < ubi->vtbl_slots + UBI_INT_VOL_COUNT; i++) {
 		kfree(ubi->volumes[i]->eba_tbl);
+		kfree(ubi->volumes[i]->secure_lebs);
 		kfree(ubi->volumes[i]);
 	}
 }
@@ -646,6 +647,8 @@ static int io_init(struct ubi_device *ubi, int max_beb_per1024)
 	 */
 
 	ubi->peb_size   = ubi->mtd->erasesize;
+	ubi->secure_peb_size = ubi->mtd->erasesize /
+			       mtd_pairing_groups_per_eb(ubi->mtd);
 	ubi->peb_count  = mtd_div_by_eb(ubi->mtd->size, ubi->mtd);
 	ubi->flash_size = ubi->mtd->size;
 
@@ -761,6 +764,7 @@ static int io_init(struct ubi_device *ubi, int max_beb_per1024)
 	}
 
 	ubi->leb_size = ubi->peb_size - ubi->leb_start;
+	ubi->secure_leb_size = ubi->secure_peb_size - ubi->leb_start;
 
 	if (!(ubi->mtd->flags & MTD_WRITEABLE)) {
 		ubi_msg(ubi, "MTD device %d is write-protected, attach in read-only mode",

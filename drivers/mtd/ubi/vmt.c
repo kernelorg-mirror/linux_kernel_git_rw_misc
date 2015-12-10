@@ -208,6 +208,8 @@ int ubi_create_volume(struct ubi_device *ubi, struct ubi_mkvol_req *req)
 
 	/* Calculate how many eraseblocks are requested */
 	vol->usable_leb_size = ubi->leb_size - ubi->leb_size % req->alignment;
+	vol->usable_secure_leb_size = ubi->secure_leb_size -
+				      ubi->secure_leb_size % req->alignment;
 	vol->reserved_pebs = div_u64(req->bytes + vol->usable_leb_size - 1,
 				     vol->usable_leb_size);
 
@@ -245,6 +247,14 @@ int ubi_create_volume(struct ubi_device *ubi, struct ubi_mkvol_req *req)
 	if (!vol->eba_tbl) {
 		err = -ENOMEM;
 		goto out_acc;
+	}
+
+	vol->secure_lebs = kzalloc(DIV_ROUND_UP(vol->reserved_pebs,
+						BITS_PER_LONG) * sizeof(long),
+				   GFP_KERNEL);
+	if (!vol->secure_lebs) {
+		err = -ENOMEM;
+		goto out_mapping;
 	}
 
 	for (i = 0; i < vol->reserved_pebs; i++)
@@ -328,8 +338,10 @@ out_sysfs:
 out_cdev:
 	cdev_del(&vol->cdev);
 out_mapping:
-	if (do_free)
+	if (do_free) {
 		kfree(vol->eba_tbl);
+		kfree(vol->secure_lebs);
+	}
 out_acc:
 	spin_lock(&ubi->volumes_lock);
 	ubi->rsvd_pebs -= vol->reserved_pebs;
@@ -431,6 +443,7 @@ int ubi_resize_volume(struct ubi_volume_desc *desc, int reserved_pebs)
 	struct ubi_volume *vol = desc->vol;
 	struct ubi_device *ubi = vol->ubi;
 	struct ubi_vtbl_record vtbl_rec;
+	unsigned long *new_secure_lebs;
 	int vol_id = vol->vol_id;
 
 	if (ubi->ro_mode)
@@ -453,6 +466,13 @@ int ubi_resize_volume(struct ubi_volume_desc *desc, int reserved_pebs)
 	new_mapping = kmalloc(reserved_pebs * sizeof(int), GFP_KERNEL);
 	if (!new_mapping)
 		return -ENOMEM;
+
+	new_secure_lebs = kzalloc(DIV_ROUND_UP(reserved_pebs, BITS_PER_LONG),
+				  GFP_KERNEL);
+	if (!new_secure_lebs) {
+		err = -ENOMEM;
+		goto out_free;
+	}
 
 	for (i = 0; i < reserved_pebs; i++)
 		new_mapping[i] = UBI_LEB_UNMAPPED;

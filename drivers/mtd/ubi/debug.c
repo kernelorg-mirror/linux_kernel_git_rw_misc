@@ -31,17 +31,18 @@
  * @offset: the starting offset within the physical eraseblock to dump
  * @len: the length of the region to dump
  */
-void ubi_dump_flash(struct ubi_device *ubi, int pnum, int offset, int len)
+void ubi_dump_flash(struct ubi_device *ubi, int pnum, int offset, int len,
+		    bool secure)
 {
 	int err;
-	size_t read;
+	size_t read = len;
 	void *buf;
-	loff_t addr = (loff_t)pnum * ubi->peb_size + offset;
 
 	buf = vmalloc(len);
 	if (!buf)
 		return;
-	err = mtd_read(ubi->mtd, addr, len, &read, buf);
+
+	err = __ubi_io_read(ubi, buf, pnum, offset, &read, secure);
 	if (err && err != -EUCLEAN) {
 		ubi_err(ubi, "err %d while reading %d bytes from PEB %d:%d, read %zd bytes",
 			err, len, pnum, offset, read);
