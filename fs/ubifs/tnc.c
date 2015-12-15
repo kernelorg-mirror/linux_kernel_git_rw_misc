@@ -1675,8 +1675,8 @@ static int read_wbuf(struct ubifs_wbuf *wbuf, void *buf, int len, int lnum,
 
 	dbg_io("LEB %d:%d, length %d", lnum, offs, len);
 	ubifs_assert(wbuf && lnum >= 0 && lnum < c->leb_cnt && offs >= 0);
-	ubifs_assert(!(offs & 7) && offs < c->leb_size);
-	ubifs_assert(offs + len <= c->leb_size);
+	ubifs_assert(!(offs & 7) && offs < ubifs_leb_size(c, lnum));
+	ubifs_assert(offs + len <= ubifs_leb_size(c, lnum));
 
 	spin_lock(&wbuf->lock);
 	overlap = (lnum == wbuf->lnum && offs + len > wbuf->offs);

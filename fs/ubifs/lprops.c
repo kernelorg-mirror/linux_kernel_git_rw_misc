@@ -431,15 +431,17 @@ static int is_lprops_full(const struct ubifs_info *c,
 int ubifs_categorize_lprops(const struct ubifs_info *c,
 			    const struct ubifs_lprops *lprops)
 {
+	int leb_size = ubifs_leb_size(c, lprops->lnum);
+
 	if ((lprops->flags & LPROPS_TAKEN) || (lprops->flags & LPROPS_CONSO))
 		return LPROPS_UNCAT;
 
-	if (lprops->free == c->leb_size) {
+	if (lprops->free == leb_size) {
 		ubifs_assert(!(lprops->flags & LPROPS_INDEX));
 		return LPROPS_EMPTY;
 	}
 
-	if (lprops->free + lprops->dirty == c->leb_size) {
+	if (lprops->free + lprops->dirty == leb_size) {
 		if (lprops->flags & LPROPS_INDEX)
 			return LPROPS_FRDI_IDX;
 		else
@@ -564,6 +566,7 @@ const struct ubifs_lprops *ubifs_change_lp(struct ubifs_info *c,
 	 * discard the "const" qualifier.
 	 */
 	struct ubifs_lprops *lprops = (struct ubifs_lprops *)lp;
+	int leb_size = ubifs_leb_size(c, lprops->lnum);
 
 	dbg_lp("LEB %d, free %d, dirty %d, flags %d",
 	       lprops->lnum, free, dirty, flags);
@@ -591,7 +594,7 @@ const struct ubifs_lprops *ubifs_change_lp(struct ubifs_info *c,
 	ubifs_assert(!(lprops->free & 7) && !(lprops->dirty & 7));
 
 	spin_lock(&c->space_lock);
-	if ((lprops->flags & LPROPS_TAKEN) && lprops->free == c->leb_size)
+	if ((lprops->flags & LPROPS_TAKEN) && lprops->free == leb_size)
 		c->lst.taken_empty_lebs -= 1;
 
 	if (!(lprops->flags & LPROPS_INDEX)) {
@@ -603,7 +606,7 @@ const struct ubifs_lprops *ubifs_change_lp(struct ubifs_info *c,
 		else
 			c->lst.total_dark -= ubifs_calc_dark(c, old_spc);
 
-		c->lst.total_used -= c->leb_size - old_spc;
+		c->lst.total_used -= leb_size - old_spc;
 	}
 
 	if (free != LPROPS_NC) {
@@ -611,10 +614,10 @@ const struct ubifs_lprops *ubifs_change_lp(struct ubifs_info *c,
 		c->lst.total_free += free - lprops->free;
 
 		/* Increase or decrease empty LEBs counter if needed */
-		if (free == c->leb_size) {
-			if (lprops->free != c->leb_size)
+		if (free == leb_size) {
+			if (lprops->free != leb_size)
 				c->lst.empty_lebs += 1;
-		} else if (lprops->free == c->leb_size)
+		} else if (lprops->free == leb_size)
 			c->lst.empty_lebs -= 1;
 		lprops->free = free;
 	}
@@ -644,10 +647,10 @@ const struct ubifs_lprops *ubifs_change_lp(struct ubifs_info *c,
 		else
 			c->lst.total_dark += ubifs_calc_dark(c, new_spc);
 
-		c->lst.total_used += c->leb_size - new_spc;
+		c->lst.total_used += leb_size - new_spc;
 	}
 
-	if ((lprops->flags & LPROPS_TAKEN) && lprops->free == c->leb_size)
+	if ((lprops->flags & LPROPS_TAKEN) && lprops->free == leb_size)
 		c->lst.taken_empty_lebs += 1;
 
 	change_category(c, lprops);
@@ -824,7 +827,7 @@ const struct ubifs_lprops *ubifs_fast_find_empty(struct ubifs_info *c)
 	lprops = list_entry(c->empty_list.next, struct ubifs_lprops, list);
 	ubifs_assert(!(lprops->flags & LPROPS_TAKEN));
 	ubifs_assert(!(lprops->flags & LPROPS_INDEX));
-	ubifs_assert(lprops->free == c->leb_size);
+	ubifs_assert(lprops->free == ubifs_leb_size(c, lprops->lnum));
 	return lprops;
 }
 
@@ -847,7 +850,8 @@ const struct ubifs_lprops *ubifs_fast_find_freeable(struct ubifs_info *c)
 	lprops = list_entry(c->freeable_list.next, struct ubifs_lprops, list);
 	ubifs_assert(!(lprops->flags & LPROPS_TAKEN));
 	ubifs_assert(!(lprops->flags & LPROPS_INDEX));
-	ubifs_assert(lprops->free + lprops->dirty == c->leb_size);
+	ubifs_assert(lprops->free + lprops->dirty ==
+		     ubifs_leb_size(c, lprops->lnum));
 	ubifs_assert(c->freeable_cnt > 0);
 	return lprops;
 }
@@ -871,7 +875,8 @@ const struct ubifs_lprops *ubifs_fast_find_frdi_idx(struct ubifs_info *c)
 	lprops = list_entry(c->frdi_idx_list.next, struct ubifs_lprops, list);
 	ubifs_assert(!(lprops->flags & LPROPS_TAKEN));
 	ubifs_assert((lprops->flags & LPROPS_INDEX));
-	ubifs_assert(lprops->free + lprops->dirty == c->leb_size);
+	ubifs_assert(lprops->free + lprops->dirty ==
+		     ubifs_leb_size(c, lprops->lnum));
 	return lprops;
 }
 
@@ -918,7 +923,7 @@ int dbg_check_cats(struct ubifs_info *c)
 		return 0;
 
 	list_for_each_entry(lprops, &c->empty_list, list) {
-		if (lprops->free != c->leb_size) {
+		if (lprops->free != ubifs_leb_size(c, lprops->lnum)) {
 			ubifs_err(c, "non-empty LEB %d on empty list (free %d dirty %d flags %d)",
 				  lprops->lnum, lprops->free, lprops->dirty,
 				  lprops->flags);
@@ -934,7 +939,8 @@ int dbg_check_cats(struct ubifs_info *c)
 
 	i = 0;
 	list_for_each_entry(lprops, &c->freeable_list, list) {
-		if (lprops->free + lprops->dirty != c->leb_size) {
+		if (lprops->free + lprops->dirty !=
+		    ubifs_leb_size(c, lprops->lnum)) {
 			ubifs_err(c, "non-freeable LEB %d on freeable list (free %d dirty %d flags %d)",
 				  lprops->lnum, lprops->free, lprops->dirty,
 				  lprops->flags);
@@ -964,7 +970,8 @@ int dbg_check_cats(struct ubifs_info *c)
 	}
 
 	list_for_each_entry(lprops, &c->frdi_idx_list, list) {
-		if (lprops->free + lprops->dirty != c->leb_size) {
+		if (lprops->free + lprops->dirty !=
+		    ubifs_leb_size(c, lprops->lnum)) {
 			ubifs_err(c, "non-freeable LEB %d on frdi_idx list (free %d dirty %d flags %d)",
 				  lprops->lnum, lprops->free, lprops->dirty,
 				  lprops->flags);
@@ -1100,6 +1107,7 @@ static int scan_check_cb(struct ubifs_info *c,
 	struct ubifs_scan_leb *sleb;
 	struct ubifs_scan_node *snod;
 	int cat, lnum = lp->lnum, is_idx = 0, used = 0, free, dirty, ret;
+	int leb_size = ubifs_leb_size(c, lp->lnum);
 	void *buf = NULL;
 
 	cat = lp->flags & LPROPS_CAT_MASK;
@@ -1161,7 +1169,7 @@ static int scan_check_cb(struct ubifs_info *c,
 		}
 	}
 
-	buf = __vmalloc(c->leb_size, GFP_NOFS, PAGE_KERNEL);
+	buf = __vmalloc(leb_size, GFP_NOFS, PAGE_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
@@ -1169,17 +1177,17 @@ static int scan_check_cb(struct ubifs_info *c,
 	 * After an unclean unmount, empty and freeable LEBs
 	 * may contain garbage - do not scan them.
 	 */
-	if (lp->free == c->leb_size) {
+	if (lp->free == leb_size) {
 		lst->empty_lebs += 1;
-		lst->total_free += c->leb_size;
-		lst->total_dark += ubifs_calc_dark(c, c->leb_size);
+		lst->total_free += leb_size;
+		lst->total_dark += ubifs_calc_dark(c, leb_size);
 		return LPT_SCAN_CONTINUE;
 	}
-	if (lp->free + lp->dirty == c->leb_size &&
+	if (lp->free + lp->dirty == leb_size &&
 	    !(lp->flags & LPROPS_INDEX)) {
 		lst->total_free  += lp->free;
 		lst->total_dirty += lp->dirty;
-		lst->total_dark  +=  ubifs_calc_dark(c, c->leb_size);
+		lst->total_dark  +=  ubifs_calc_dark(c, leb_size);
 		return LPT_SCAN_CONTINUE;
 	}
 
@@ -1224,21 +1232,21 @@ static int scan_check_cb(struct ubifs_info *c,
 		}
 	}
 
-	free = c->leb_size - sleb->endpt;
+	free = leb_size - sleb->endpt;
 	dirty = sleb->endpt - used;
 
-	if (free > c->leb_size || free < 0 || dirty > c->leb_size ||
+	if (free > leb_size || free < 0 || dirty > leb_size ||
 	    dirty < 0) {
 		ubifs_err(c, "bad calculated accounting for LEB %d: free %d, dirty %d",
 			  lnum, free, dirty);
 		goto out_destroy;
 	}
 
-	if (lp->free + lp->dirty == c->leb_size &&
-	    free + dirty == c->leb_size)
+	if (lp->free + lp->dirty == leb_size &&
+	    free + dirty == leb_size)
 		if ((is_idx && !(lp->flags & LPROPS_INDEX)) ||
-		    (!is_idx && free == c->leb_size) ||
-		    lp->free == c->leb_size) {
+		    (!is_idx && free == leb_size) ||
+		    lp->free == leb_size) {
 			/*
 			 * Empty or freeable LEBs could contain index
 			 * nodes from an uncompleted commit due to an
@@ -1272,7 +1280,7 @@ static int scan_check_cb(struct ubifs_info *c,
 		goto out_print;
 
 	if (is_idx && !(lp->flags & LPROPS_INDEX)) {
-		if (free == c->leb_size)
+		if (free == leb_size)
 			/* Free but not unmapped LEB, it's fine */
 			is_idx = 0;
 		else {
@@ -1286,14 +1294,14 @@ static int scan_check_cb(struct ubifs_info *c,
 		goto out_print;
 	}
 
-	if (free == c->leb_size)
+	if (free == leb_size)
 		lst->empty_lebs += 1;
 
 	if (is_idx)
 		lst->idx_lebs += 1;
 
 	if (!(lp->flags & LPROPS_INDEX))
-		lst->total_used += c->leb_size - free - dirty;
+		lst->total_used += leb_size - free - dirty;
 	lst->total_free += free;
 	lst->total_dirty += dirty;
 

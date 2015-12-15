@@ -647,7 +647,8 @@ struct ubifs_sb_node {
 	__le32 time_gran;
 	__u8 uuid[16];
 	__le32 ro_compat_version;
-	__u8 padding2[3968];
+	__le32 unsecure_leb_size;
+	__u8 padding2[3964];
 } __packed;
 
 /**

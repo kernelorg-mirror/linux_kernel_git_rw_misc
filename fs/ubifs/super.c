@@ -509,9 +509,9 @@ static int init_constants_early(struct ubifs_info *c)
 	}
 
 	c->leb_cnt = c->vi.size;
-	c->leb_size = c->vi.usable_leb_size;
+	c->leb_size = c->vi.usable_secure_leb_size;
+	c->unsecure_leb_size = c->vi.usable_leb_size;
 	c->leb_start = c->di.leb_start;
-	c->half_leb_size = c->leb_size / 2;
 	c->min_io_size = c->di.min_io_size;
 	c->min_io_shift = fls(c->min_io_size) - 1;
 	c->max_write_size = c->di.max_write_size;
@@ -657,7 +657,18 @@ static int init_constants_sb(struct ubifs_info *c)
 	int tmp, err;
 	long long tmp64;
 
-	c->main_bytes = (long long)c->main_lebs * c->leb_size;
+	if (c->unsecure_leb_size == c->leb_size) {
+		c->main_bytes = (long long)c->main_lebs * c->leb_size;
+	} else {
+		/*
+		 * Consider that at least half the reserved LEBs won't be used
+		 * in secure (SLC) mode.
+		 */
+		c->main_bytes = (long long)(c->main_lebs / 2) * c->leb_size;
+		c->main_bytes += (long long)(c->main_lebs / 2) *
+				 c->unsecure_leb_size;
+	}
+
 	c->max_znode_sz = sizeof(struct ubifs_znode) +
 				c->fanout * sizeof(struct ubifs_zbranch);
 

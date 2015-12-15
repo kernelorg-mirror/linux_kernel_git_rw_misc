@@ -114,8 +114,8 @@ int ubifs_leb_read(const struct ubifs_info *c, int lnum, void *buf, int offs,
 	return err;
 }
 
-int ubifs_leb_write(struct ubifs_info *c, int lnum, const void *buf, int offs,
-		    int len)
+int ubifs_leb_write(struct ubifs_info *c, int lnum, const void *buf,
+			   int offs, int len)
 {
 	int err;
 
@@ -132,6 +132,8 @@ int ubifs_leb_write(struct ubifs_info *c, int lnum, const void *buf, int offs,
 		if (err)
 			return err;
 	}
+
+	ubifs_assert(offs + len <= ubifs_leb_size(c, lnum));
 
 	if (!dbg_is_tst_rcvry(c))
 		err = ubi_leb_write(c->ubi, lnum, buf, offs, len);
@@ -290,7 +292,7 @@ int ubifs_check_node(const struct ubifs_info *c, const void *buf, int lnum,
 	const struct ubifs_ch *ch = buf;
 
 	ubifs_assert(lnum >= 0 && lnum < c->leb_cnt && offs >= 0);
-	ubifs_assert(!(offs & 7) && offs < c->leb_size);
+	ubifs_assert(!(offs & 7) && offs < ubifs_leb_size(c, lnum));
 
 	magic = le32_to_cpu(ch->magic);
 	if (magic != UBIFS_NODE_MAGIC) {
@@ -309,7 +311,7 @@ int ubifs_check_node(const struct ubifs_info *c, const void *buf, int lnum,
 	}
 
 	node_len = le32_to_cpu(ch->len);
-	if (node_len + offs > c->leb_size)
+	if (node_len + offs > ubifs_leb_size(c, lnum))
 		goto out_len;
 
 	if (c->ranges[type].max_len == 0) {
@@ -541,22 +543,24 @@ static void cancel_wbuf_timer_nolock(struct ubifs_wbuf *wbuf)
 int ubifs_wbuf_sync_nolock(struct ubifs_wbuf *wbuf)
 {
 	struct ubifs_info *c = wbuf->c;
-	int err, dirt, sync_len;
+	int err, dirt, sync_len, leb_size;
 
 	cancel_wbuf_timer_nolock(wbuf);
 	if (!wbuf->used || wbuf->lnum == -1)
 		/* Write-buffer is empty or not seeked */
 		return 0;
 
+	leb_size = ubifs_leb_size(c, wbuf->lnum);
+
 	dbg_io("LEB %d:%d, %d bytes, jhead %s",
 	       wbuf->lnum, wbuf->offs, wbuf->used, dbg_jhead(wbuf->jhead));
 	ubifs_assert(!(wbuf->avail & 7));
-	ubifs_assert(wbuf->offs + wbuf->size <= c->leb_size);
+	ubifs_assert(wbuf->offs + wbuf->size <= leb_size);
 	ubifs_assert(wbuf->size >= c->min_io_size);
 	ubifs_assert(wbuf->size <= c->max_write_size);
 	ubifs_assert(wbuf->size % c->min_io_size == 0);
 	ubifs_assert(!c->ro_media && !c->ro_mount);
-	if (c->leb_size - wbuf->offs >= c->max_write_size)
+	if (leb_size - wbuf->offs >= c->max_write_size)
 		ubifs_assert(!((wbuf->offs + wbuf->size) % c->max_write_size));
 
 	if (c->ro_error)
@@ -586,8 +590,8 @@ int ubifs_wbuf_sync_nolock(struct ubifs_wbuf *wbuf)
 	 * write-buffer flush we are again at the optimal offset (aligned to
 	 * @c->max_write_size).
 	 */
-	if (c->leb_size - wbuf->offs < c->max_write_size)
-		wbuf->size = c->leb_size - wbuf->offs;
+	if (leb_size - wbuf->offs < c->max_write_size)
+		wbuf->size = leb_size - wbuf->offs;
 	else if (wbuf->offs & (c->max_write_size - 1))
 		wbuf->size = ALIGN(wbuf->offs, c->max_write_size) - wbuf->offs;
 	else
@@ -599,7 +603,7 @@ int ubifs_wbuf_sync_nolock(struct ubifs_wbuf *wbuf)
 
 	if (wbuf->sync_callback)
 		err = wbuf->sync_callback(c, wbuf->lnum,
-					  c->leb_size - wbuf->offs, dirt);
+					  leb_size - wbuf->offs, dirt);
 	return err;
 }
 
@@ -616,10 +620,11 @@ int ubifs_wbuf_sync_nolock(struct ubifs_wbuf *wbuf)
 int ubifs_wbuf_seek_nolock(struct ubifs_wbuf *wbuf, int lnum, int offs)
 {
 	const struct ubifs_info *c = wbuf->c;
+	int leb_size = ubifs_leb_size(c, lnum);
 
 	dbg_io("LEB %d:%d, jhead %s", lnum, offs, dbg_jhead(wbuf->jhead));
 	ubifs_assert(lnum >= 0 && lnum < c->leb_cnt);
-	ubifs_assert(offs >= 0 && offs <= c->leb_size);
+	ubifs_assert(offs >= 0 && offs <= leb_size);
 	ubifs_assert(offs % c->min_io_size == 0 && !(offs & 7));
 	ubifs_assert(lnum != wbuf->lnum);
 	ubifs_assert(wbuf->used == 0);
@@ -627,8 +632,8 @@ int ubifs_wbuf_seek_nolock(struct ubifs_wbuf *wbuf, int lnum, int offs)
 	spin_lock(&wbuf->lock);
 	wbuf->lnum = lnum;
 	wbuf->offs = offs;
-	if (c->leb_size - wbuf->offs < c->max_write_size)
-		wbuf->size = c->leb_size - wbuf->offs;
+	if (leb_size - wbuf->offs < c->max_write_size)
+		wbuf->size = leb_size - wbuf->offs;
 	else if (wbuf->offs & (c->max_write_size - 1))
 		wbuf->size = ALIGN(wbuf->offs, c->max_write_size) - wbuf->offs;
 	else
@@ -724,13 +729,14 @@ int ubifs_wbuf_write_nolock(struct ubifs_wbuf *wbuf, void *buf, int len)
 {
 	struct ubifs_info *c = wbuf->c;
 	int err, written, n, aligned_len = ALIGN(len, 8);
+	int leb_size = ubifs_leb_size(c, wbuf->lnum);
 
 	dbg_io("%d bytes (%s) to jhead %s wbuf at LEB %d:%d", len,
 	       dbg_ntype(((struct ubifs_ch *)buf)->node_type),
 	       dbg_jhead(wbuf->jhead), wbuf->lnum, wbuf->offs + wbuf->used);
 	ubifs_assert(len > 0 && wbuf->lnum >= 0 && wbuf->lnum < c->leb_cnt);
 	ubifs_assert(wbuf->offs >= 0 && wbuf->offs % c->min_io_size == 0);
-	ubifs_assert(!(wbuf->offs & 7) && wbuf->offs <= c->leb_size);
+	ubifs_assert(!(wbuf->offs & 7) && wbuf->offs <= leb_size);
 	ubifs_assert(wbuf->avail > 0 && wbuf->avail <= wbuf->size);
 	ubifs_assert(wbuf->size >= c->min_io_size);
 	ubifs_assert(wbuf->size <= c->max_write_size);
@@ -738,10 +744,10 @@ int ubifs_wbuf_write_nolock(struct ubifs_wbuf *wbuf, void *buf, int len)
 	ubifs_assert(mutex_is_locked(&wbuf->io_mutex));
 	ubifs_assert(!c->ro_media && !c->ro_mount);
 	ubifs_assert(!c->space_fixup);
-	if (c->leb_size - wbuf->offs >= c->max_write_size)
+	if (leb_size - wbuf->offs >= c->max_write_size)
 		ubifs_assert(!((wbuf->offs + wbuf->size) % c->max_write_size));
 
-	if (c->leb_size - wbuf->offs - wbuf->used < aligned_len) {
+	if (leb_size - wbuf->offs - wbuf->used < aligned_len) {
 		err = -ENOSPC;
 		goto out;
 	}
@@ -768,10 +774,10 @@ int ubifs_wbuf_write_nolock(struct ubifs_wbuf *wbuf, void *buf, int len)
 
 			spin_lock(&wbuf->lock);
 			wbuf->offs += wbuf->size;
-			if (c->leb_size - wbuf->offs >= c->max_write_size)
+			if (leb_size - wbuf->offs >= c->max_write_size)
 				wbuf->size = c->max_write_size;
 			else
-				wbuf->size = c->leb_size - wbuf->offs;
+				wbuf->size = leb_size - wbuf->offs;
 			wbuf->avail = wbuf->size;
 			wbuf->used = 0;
 			wbuf->next_ino = 0;
@@ -857,10 +863,10 @@ int ubifs_wbuf_write_nolock(struct ubifs_wbuf *wbuf, void *buf, int len)
 		 */
 		memcpy(wbuf->buf, buf + written, len);
 
-	if (c->leb_size - wbuf->offs >= c->max_write_size)
+	if (leb_size - wbuf->offs >= c->max_write_size)
 		wbuf->size = c->max_write_size;
 	else
-		wbuf->size = c->leb_size - wbuf->offs;
+		wbuf->size = leb_size - wbuf->offs;
 	wbuf->avail = wbuf->size - aligned_len;
 	wbuf->used = aligned_len;
 	wbuf->next_ino = 0;
@@ -868,7 +874,7 @@ int ubifs_wbuf_write_nolock(struct ubifs_wbuf *wbuf, void *buf, int len)
 
 exit:
 	if (wbuf->sync_callback) {
-		int free = c->leb_size - wbuf->offs - wbuf->used;
+		int free = leb_size - wbuf->offs - wbuf->used;
 
 		err = wbuf->sync_callback(c, wbuf->lnum, free, 0);
 		if (err)
@@ -912,7 +918,7 @@ int ubifs_write_node(struct ubifs_info *c, void *buf, int len, int lnum,
 	       lnum, offs, dbg_ntype(((struct ubifs_ch *)buf)->node_type), len,
 	       buf_len);
 	ubifs_assert(lnum >= 0 && lnum < c->leb_cnt && offs >= 0);
-	ubifs_assert(offs % c->min_io_size == 0 && offs < c->leb_size);
+	ubifs_assert(offs % c->min_io_size == 0 && offs < ubifs_leb_size(c, lnum));
 	ubifs_assert(!c->ro_media && !c->ro_mount);
 	ubifs_assert(!c->space_fixup);
 
@@ -952,7 +958,7 @@ int ubifs_read_node_wbuf(struct ubifs_wbuf *wbuf, void *buf, int type, int len,
 	dbg_io("LEB %d:%d, %s, length %d, jhead %s", lnum, offs,
 	       dbg_ntype(type), len, dbg_jhead(wbuf->jhead));
 	ubifs_assert(wbuf && lnum >= 0 && lnum < c->leb_cnt && offs >= 0);
-	ubifs_assert(!(offs & 7) && offs < c->leb_size);
+	ubifs_assert(!(offs & 7) && offs < ubifs_leb_size(c, lnum));
 	ubifs_assert(type >= 0 && type < UBIFS_NODE_TYPES_CNT);
 
 	spin_lock(&wbuf->lock);
@@ -1022,13 +1028,13 @@ out:
 int ubifs_read_node(const struct ubifs_info *c, void *buf, int type, int len,
 		    int lnum, int offs)
 {
-	int err, l;
+	int err, l, leb_size = ubifs_leb_size(c, lnum);
 	struct ubifs_ch *ch = buf;
 
 	dbg_io("LEB %d:%d, %s, length %d", lnum, offs, dbg_ntype(type), len);
 	ubifs_assert(lnum >= 0 && lnum < c->leb_cnt && offs >= 0);
-	ubifs_assert(len >= UBIFS_CH_SZ && offs + len <= c->leb_size);
-	ubifs_assert(!(offs & 7) && offs < c->leb_size);
+	ubifs_assert(len >= UBIFS_CH_SZ && offs + len <= leb_size);
+	ubifs_assert(!(offs & 7) && offs < leb_size);
 	ubifs_assert(type >= 0 && type < UBIFS_NODE_TYPES_CNT);
 
 	err = ubifs_leb_read(c, lnum, buf, offs, len, 0);

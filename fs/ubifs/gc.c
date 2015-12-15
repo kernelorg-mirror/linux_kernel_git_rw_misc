@@ -86,7 +86,7 @@ static int switch_gc_head(struct ubifs_info *c)
 	ubifs_assert(gc_lnum != -1);
 	dbg_gc("switch GC head from LEB %d:%d to LEB %d (waste %d bytes)",
 	       wbuf->lnum, wbuf->offs + wbuf->used, gc_lnum,
-	       c->leb_size - wbuf->offs - wbuf->used);
+	       ubifs_leb_size(c, wbuf->lnum) - wbuf->offs - wbuf->used);
 
 	err = ubifs_wbuf_sync_nolock(wbuf);
 	if (err)
@@ -413,7 +413,8 @@ static int move_nodes(struct ubifs_info *c, struct ubifs_scan_leb *sleb)
 
 		/* Move data nodes */
 		list_for_each_entry_safe(snod, tmp, &sleb->nodes, list) {
-			avail = c->leb_size - wbuf->offs - wbuf->used;
+			avail = ubifs_leb_size(c, wbuf->lnum) - wbuf->offs -
+				wbuf->used;
 			if  (snod->len > avail)
 				/*
 				 * Do not skip data nodes in order to optimize
@@ -428,7 +429,8 @@ static int move_nodes(struct ubifs_info *c, struct ubifs_scan_leb *sleb)
 
 		/* Move non-data nodes */
 		list_for_each_entry_safe(snod, tmp, &nondata, list) {
-			avail = c->leb_size - wbuf->offs - wbuf->used;
+			avail = ubifs_leb_size(c, wbuf->lnum) - wbuf->offs -
+				wbuf->used;
 			if (avail < min)
 				break;
 
@@ -521,12 +523,12 @@ int ubifs_garbage_collect_leb(struct ubifs_info *c, struct ubifs_lprops *lp)
 	ubifs_assert(c->gc_lnum != lnum);
 	ubifs_assert(wbuf->lnum != lnum);
 
-	if (lp->free + lp->dirty == c->leb_size) {
+	if (lp->free + lp->dirty == ubifs_leb_size(c, lp->lnum)) {
 		/* Special case - a free LEB  */
 		dbg_gc("LEB %d is free, return it", lp->lnum);
 		ubifs_assert(!(lp->flags & LPROPS_INDEX));
 
-		if (lp->free != c->leb_size) {
+		if (lp->free != ubifs_leb_size(c, lp->lnum)) {
 			/*
 			 * Write buffers must be sync'd before unmapping
 			 * freeable LEBs, because one of them may contain data
@@ -535,7 +537,8 @@ int ubifs_garbage_collect_leb(struct ubifs_info *c, struct ubifs_lprops *lp)
 			err = gc_sync_wbufs(c);
 			if (err)
 				return err;
-			err = ubifs_change_one_lp(c, lp->lnum, c->leb_size,
+			err = ubifs_change_one_lp(c, lp->lnum,
+						  ubifs_leb_size(c, lp->lnum),
 						  0, 0, 0, 0);
 			if (err)
 				return err;
@@ -596,8 +599,8 @@ int ubifs_garbage_collect_leb(struct ubifs_info *c, struct ubifs_lprops *lp)
 		 * although we freed this LEB, it will become usable only after
 		 * the commit.
 		 */
-		err = ubifs_change_one_lp(c, lnum, c->leb_size, 0, 0,
-					  LPROPS_INDEX, 1);
+		err = ubifs_change_one_lp(c, lnum, ubifs_leb_size(c, lnum),
+					  0, 0, LPROPS_INDEX, 1);
 		if (err)
 			goto out;
 		err = LEB_FREED_IDX;
@@ -613,7 +616,8 @@ int ubifs_garbage_collect_leb(struct ubifs_info *c, struct ubifs_lprops *lp)
 		if (err)
 			goto out_inc_seq;
 
-		err = ubifs_change_one_lp(c, lnum, c->leb_size, 0, 0, 0, 0);
+		err = ubifs_change_one_lp(c, lnum, ubifs_leb_size(c, lnum),
+					  0, 0, 0, 0);
 		if (err)
 			goto out_inc_seq;
 
@@ -930,7 +934,7 @@ int ubifs_garbage_collect(struct ubifs_info *c, int anyway)
 	ubifs_assert(!wbuf->used);
 
 	for (i = 0; ; i++) {
-		int space_before, space_after;
+		int space_before, space_after, leb_size;
 
 		cond_resched();
 
@@ -979,9 +983,12 @@ int ubifs_garbage_collect(struct ubifs_info *c, int anyway)
 		       lp.lnum, lp.free, lp.dirty, lp.free + lp.dirty,
 		       min_space);
 
-		space_before = c->leb_size - wbuf->offs - wbuf->used;
+		leb_size = ubifs_leb_size(c, wbuf->lnum);
+
 		if (wbuf->lnum == -1)
 			space_before = 0;
+		else
+			space_before = leb_size - wbuf->offs - wbuf->used;
 
 		ret = ubifs_garbage_collect_leb(c, &lp);
 		if (ret < 0) {
@@ -1019,7 +1026,7 @@ int ubifs_garbage_collect(struct ubifs_info *c, int anyway)
 		}
 
 		ubifs_assert(ret == LEB_RETAINED);
-		space_after = c->leb_size - wbuf->offs - wbuf->used;
+		space_after = leb_size - wbuf->offs - wbuf->used;
 		dbg_gc("LEB %d retained, freed %d bytes", lp.lnum,
 		       space_after - space_before);
 
@@ -1123,7 +1130,8 @@ int ubifs_gc_start_commit(struct ubifs_info *c)
 		err = ubifs_leb_unmap(c, lp->lnum);
 		if (err)
 			goto out;
-		lp = ubifs_change_lp(c, lp, c->leb_size, 0, lp->flags, 0);
+		lp = ubifs_change_lp(c, lp, ubifs_leb_size(c, lp->lnum), 0,
+				     lp->flags, 0);
 		if (IS_ERR(lp)) {
 			err = PTR_ERR(lp);
 			goto out;
@@ -1154,7 +1162,8 @@ int ubifs_gc_start_commit(struct ubifs_info *c)
 		ubifs_assert(lp->flags & LPROPS_INDEX);
 		/* Don't release the LEB until after the next commit */
 		flags = (lp->flags | LPROPS_TAKEN) ^ LPROPS_INDEX;
-		lp = ubifs_change_lp(c, lp, c->leb_size, 0, flags, 1);
+		lp = ubifs_change_lp(c, lp, ubifs_leb_size(c, lp->lnum),
+				     0, flags, 1);
 		if (IS_ERR(lp)) {
 			err = PTR_ERR(lp);
 			kfree(idx_gc);
