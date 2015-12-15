@@ -1335,8 +1335,8 @@ struct ubifs_info {
 	int max_write_size;
 	int max_write_shift;
 	int leb_size;
-	int unsecure_leb_size;
 	int leb_start;
+	int half_leb_size;
 	int idx_leb_size;
 	int leb_cnt;
 	int max_leb_cnt;

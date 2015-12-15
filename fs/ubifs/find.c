@@ -113,7 +113,7 @@ static int scan_for_dirty_cb(struct ubifs_info *c,
 	if (data->exclude_index && lprops->flags & LPROPS_INDEX)
 		return ret;
 	/* If specified, exclude empty or freeable LEBs */
-	if (lprops->free + lprops->dirty == ubifs_leb_size(c, lprops->lnum)) {
+	if (lprops->free + lprops->dirty == c->leb_size) {
 		if (!data->pick_free)
 			return ret;
 	/* Exclude LEBs with too little dirty space (unless it is empty) */
@@ -194,7 +194,7 @@ static const struct ubifs_lprops *scan_for_dirty(struct ubifs_info *c,
 	ubifs_assert(lprops->free + lprops->dirty >= min_space);
 	ubifs_assert(lprops->dirty >= c->dead_wm ||
 		     (pick_free &&
-		      lprops->free + lprops->dirty == ubifs_leb_size(c, lprops->lnum)));
+		      lprops->free + lprops->dirty == c->leb_size));
 	ubifs_assert(!(lprops->flags & LPROPS_TAKEN));
 	ubifs_assert(!exclude_index || !(lprops->flags & LPROPS_INDEX));
 	return lprops;
@@ -299,8 +299,7 @@ int ubifs_find_dirty_leb(struct ubifs_info *c, struct ubifs_lprops *ret_lp,
 		 * we use garbage collector to consolidate it. The "half"
 		 * criteria just feels to be fine.
 		 */
-		if (sum < min_space ||
-		    sum < ubifs_half_leb_size(c, idx_lp->lnum))
+		if (sum < min_space || sum < c->half_leb_size)
 			idx_lp = NULL;
 	}
 
@@ -330,7 +329,7 @@ int ubifs_find_dirty_leb(struct ubifs_info *c, struct ubifs_lprops *ret_lp,
 		goto out;
 	}
 	ubifs_assert(lp->dirty >= c->dead_wm ||
-		     (pick_free && lp->free + lp->dirty == ubifs_leb_size(c, lp->lnum)));
+		     (pick_free && lp->free + lp->dirty == c->leb_size));
 
 found:
 	dbg_find("found LEB %d, free %d, dirty %d, flags %#x",
@@ -381,8 +380,7 @@ static int scan_for_free_cb(struct ubifs_info *c,
 	if (lprops->free < data->min_space)
 		return ret;
 	/* If specified, exclude empty LEBs */
-	if (!data->pick_free &&
-	    lprops->free == ubifs_leb_size(c, lprops->lnum))
+	if (!data->pick_free && lprops->free == c->leb_size)
 		return ret;
 	/*
 	 * LEBs that have only free and dirty space must not be allocated
@@ -390,8 +388,7 @@ static int scan_for_free_cb(struct ubifs_info *c,
 	 * that is obsolete only because of nodes that are still sitting in a
 	 * wbuf.
 	 */
-	if (lprops->free + lprops->dirty == ubifs_leb_size(c, lprops->lnum) &&
-	    lprops->dirty > 0)
+	if (lprops->free + lprops->dirty == c->leb_size && lprops->dirty > 0)
 		return ret;
 	/* Finally we found space */
 	data->lnum = lprops->lnum;
@@ -499,7 +496,7 @@ int ubifs_find_free_space(struct ubifs_info *c, int min_space, int *offs,
 			  int squeeze)
 {
 	const struct ubifs_lprops *lprops;
-	int lebs, rsvd_idx_lebs, pick_free = 0, err, lnum, flags, leb_size;
+	int lebs, rsvd_idx_lebs, pick_free = 0, err, lnum, flags;
 
 	dbg_find("min_space %d", min_space);
 	ubifs_get_lprops(c);
@@ -563,8 +560,7 @@ int ubifs_find_free_space(struct ubifs_info *c, int min_space, int *offs,
 		spin_unlock(&c->space_lock);
 	}
 
-	leb_size = ubifs_leb_size(c, lprops->lnum);
-	*offs = leb_size - lprops->free;
+	*offs = c->leb_size - lprops->free;
 	ubifs_release_lprops(c);
 
 	if (*offs == 0) {
@@ -579,8 +575,8 @@ int ubifs_find_free_space(struct ubifs_info *c, int min_space, int *offs,
 			return err;
 	}
 
-	dbg_find("found LEB %d, free %d", lnum, leb_size - *offs);
-	ubifs_assert(*offs <= leb_size - min_space);
+	dbg_find("found LEB %d, free %d", lnum, c->leb_size - *offs);
+	ubifs_assert(*offs <= c->leb_size - min_space);
 	return lnum;
 
 out:
@@ -621,7 +617,7 @@ static int scan_for_idx_cb(struct ubifs_info *c,
 	if (lprops->flags & LPROPS_INDEX)
 		return ret;
 	/* Exclude LEBs that cannot be made empty */
-	if (lprops->free + lprops->dirty != ubifs_leb_size(c, lprops->lnum))
+	if (lprops->free + lprops->dirty != c->leb_size)
 		return ret;
 	/*
 	 * We are allocating for the index so it is safe to allocate LEBs with
@@ -654,7 +650,7 @@ static const struct ubifs_lprops *scan_for_leb_for_idx(struct ubifs_info *c)
 	if (IS_ERR(lprops))
 		return lprops;
 	ubifs_assert(lprops->lnum == data.lnum);
-	ubifs_assert(lprops->free + lprops->dirty == ubifs_leb_size(c, lprops->lnum));
+	ubifs_assert(lprops->free + lprops->dirty == c->leb_size);
 	ubifs_assert(!(lprops->flags & LPROPS_TAKEN));
 	ubifs_assert(!(lprops->flags & LPROPS_INDEX));
 	return lprops;

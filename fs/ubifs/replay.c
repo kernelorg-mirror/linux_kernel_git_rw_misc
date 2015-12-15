@@ -97,7 +97,7 @@ struct bud_entry {
 static int set_bud_lprops(struct ubifs_info *c, struct bud_entry *b)
 {
 	const struct ubifs_lprops *lp;
-	int err = 0, dirty, leb_size;
+	int err = 0, dirty;
 
 	ubifs_get_lprops(c);
 
@@ -107,9 +107,8 @@ static int set_bud_lprops(struct ubifs_info *c, struct bud_entry *b)
 		goto out;
 	}
 
-	leb_size = ubifs_leb_size(c, lp->lnum);
 	dirty = lp->dirty;
-	if (b->bud->start == 0 && (lp->free != leb_size || lp->dirty != 0)) {
+	if (b->bud->start == 0 && (lp->free != c->leb_size || lp->dirty != 0)) {
 		/*
 		 * The LEB was added to the journal with a starting offset of
 		 * zero which means the LEB must have been empty. The LEB
@@ -133,7 +132,7 @@ static int set_bud_lprops(struct ubifs_info *c, struct bud_entry *b)
 			lp->free, lp->dirty);
 		dbg_gc("bud LEB %d was GC'd (%d free, %d dirty)", b->bud->lnum,
 			lp->free, lp->dirty);
-		dirty -= ubifs_leb_size(c, lp->lnum) - lp->free;
+		dirty -= c->leb_size - lp->free;
 		/*
 		 * If the replay order was perfect the dirty space would now be
 		 * zero. The order is not perfect because the journal heads
@@ -155,7 +154,7 @@ static int set_bud_lprops(struct ubifs_info *c, struct bud_entry *b)
 
 	/* Make sure the journal head points to the latest bud */
 	err = ubifs_wbuf_seek_nolock(&c->jheads[b->bud->jhead].wbuf,
-				     b->bud->lnum, leb_size - b->free);
+				     b->bud->lnum, c->leb_size - b->free);
 
 out:
 	ubifs_release_lprops(c);
@@ -677,7 +676,7 @@ static int replay_bud(struct ubifs_info *c, struct bud_entry *b)
 	ubifs_assert(sleb->endpt % c->min_io_size == 0);
 
 	b->dirty = sleb->endpt - offs - used;
-	b->free = ubifs_leb_size(c, lnum) - sleb->endpt;
+	b->free = c->leb_size - sleb->endpt;
 	dbg_mnt("bud LEB %d replied: dirty %d, free %d",
 		lnum, b->dirty, b->free);
 
@@ -797,7 +796,7 @@ static int validate_ref(struct ubifs_info *c, const struct ubifs_ref_node *ref)
 	 * So this is why we require 'offs > c->leb_size'.
 	 */
 	if (jhead >= c->jhead_cnt || lnum >= c->leb_cnt ||
-	    lnum < c->main_first || offs > ubifs_leb_size(c, lnum) ||
+	    lnum < c->main_first || offs > c->leb_size ||
 	    offs & (c->min_io_size - 1))
 		return -EINVAL;
 
@@ -945,7 +944,7 @@ static int replay_log_leb(struct ubifs_info *c, int lnum, int offs, void *sbuf)
 		}
 	}
 
-	if (sleb->endpt || c->lhead_offs >= ubifs_leb_size(c, c->lhead_lnum)) {
+	if (sleb->endpt || c->lhead_offs >= c->leb_size) {
 		c->lhead_lnum = lnum;
 		c->lhead_offs = sleb->endpt;
 	}
@@ -1017,7 +1016,7 @@ int ubifs_replay_journal(struct ubifs_info *c)
 	if (free < 0)
 		return free; /* Error code */
 
-	if (c->ihead_offs != ubifs_leb_size(c, c->ihead_lnum) - free) {
+	if (c->ihead_offs != c->leb_size - free) {
 		ubifs_err(c, "bad index head LEB %d:%d", c->ihead_lnum,
 			  c->ihead_offs);
 		return -EINVAL;
