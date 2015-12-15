@@ -122,6 +122,17 @@ int ubifs_leb_write(struct ubifs_info *c, int lnum, const void *buf, int offs,
 	ubifs_assert(!c->ro_media && !c->ro_mount);
 	if (c->ro_error)
 		return -EROFS;
+
+	/*
+	 * Unsecure LEBs should be explicitly mapped before writing on it.
+	 * If the LEB is not mapped, map it as a secure LEB.
+	 */
+	if (!ubifs_is_mapped(c, lnum)) {
+		err = ubi_secure_leb_map(c->ubi, lnum);
+		if (err)
+			return err;
+	}
+
 	if (!dbg_is_tst_rcvry(c))
 		err = ubi_leb_write(c->ubi, lnum, buf, offs, len);
 	else
@@ -142,6 +153,10 @@ int ubifs_leb_change(struct ubifs_info *c, int lnum, const void *buf, int len)
 	ubifs_assert(!c->ro_media && !c->ro_mount);
 	if (c->ro_error)
 		return -EROFS;
+
+	if (!ubi_is_mapped(c->ubi, lnum))
+		return ubifs_leb_write(c, lnum, buf, 0, len);
+
 	if (!dbg_is_tst_rcvry(c))
 		err = ubi_leb_change(c->ubi, lnum, buf, len);
 	else
@@ -182,6 +197,25 @@ int ubifs_leb_map(struct ubifs_info *c, int lnum)
 	if (c->ro_error)
 		return -EROFS;
 	if (!dbg_is_tst_rcvry(c))
+		err = ubi_secure_leb_map(c->ubi, lnum);
+	else
+		err = dbg_secure_leb_map(c, lnum);
+	if (err) {
+		ubifs_err(c, "mapping LEB %d failed, error %d", lnum, err);
+		ubifs_ro_mode(c, err);
+		dump_stack();
+	}
+	return err;
+}
+
+int ubifs_unsecure_leb_map(struct ubifs_info *c, int lnum)
+{
+	int err;
+
+	ubifs_assert(!c->ro_media && !c->ro_mount);
+	if (c->ro_error)
+		return -EROFS;
+	if (!dbg_is_tst_rcvry(c))
 		err = ubi_leb_map(c->ubi, lnum);
 	else
 		err = dbg_leb_map(c, lnum);
@@ -204,6 +238,20 @@ int ubifs_is_mapped(const struct ubifs_info *c, int lnum)
 		dump_stack();
 	}
 	return err;
+}
+
+int ubifs_leb_size(const struct ubifs_info *c, int lnum)
+{
+	/* LEBs are mapped in secure mode by default. */
+	if (!ubi_is_mapped(c->ubi, lnum))
+		return c->leb_size;
+
+	return ubi_leb_size(c->ubi, lnum);
+}
+
+int ubifs_half_leb_size(const struct ubifs_info *c, int lnum)
+{
+	return ubifs_leb_size(c, lnum) / 2;
 }
 
 /**
@@ -1146,5 +1194,23 @@ int ubifs_sync_wbufs_by_inode(struct ubifs_info *c, struct inode *inode)
 			return err;
 		}
 	}
+	return 0;
+}
+
+int ubifs_sync_all_wbufs_nolock(struct ubifs_info *c)
+{
+	int i, err;
+
+	for (i = 0; i < c->jhead_cnt; i++) {
+		struct ubifs_wbuf *wbuf = &c->jheads[i].wbuf;
+
+		if (wbuf->manual_sync)
+			continue;
+
+		err = ubifs_wbuf_sync(wbuf);
+		if (err)
+			return err;
+	}
+
 	return 0;
 }

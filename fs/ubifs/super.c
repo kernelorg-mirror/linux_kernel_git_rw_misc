@@ -449,7 +449,7 @@ static int ubifs_show_options(struct seq_file *s, struct dentry *root)
 
 static int ubifs_sync_fs(struct super_block *sb, int wait)
 {
-	int i, err;
+	int err;
 	struct ubifs_info *c = sb->s_fs_info;
 
 	/*
@@ -464,11 +464,9 @@ static int ubifs_sync_fs(struct super_block *sb, int wait)
 	 * Synchronize write buffers, because 'ubifs_run_commit()' does not
 	 * do this if it waits for an already running commit.
 	 */
-	for (i = 0; i < c->jhead_cnt; i++) {
-		err = ubifs_wbuf_sync(&c->jheads[i].wbuf);
-		if (err)
-			return err;
-	}
+	err = ubifs_sync_all_wbufs_nolock(c);
+	if (err)
+		return err;
 
 	/*
 	 * Strictly speaking, it is not necessary to commit the journal here,
@@ -604,6 +602,12 @@ static int init_constants_early(struct ubifs_info *c)
 	 */
 	c->dead_wm = ALIGN(MIN_WRITE_SZ, c->min_io_size);
 	c->dark_wm = ALIGN(UBIFS_MAX_NODE_SZ, c->min_io_size);
+
+	/*
+	 * A LEB is considered 'full' when the payload data exceed half the
+	 * secure LEB size.
+	 */
+	c->full_wm = ALIGN(c->half_leb_size, c->min_io_size);
 
 	/*
 	 * Calculate how many bytes would be wasted at the end of LEB if it was
@@ -820,6 +824,14 @@ static int alloc_wbufs(struct ubifs_info *c)
 	 */
 	c->jheads[GCHD].wbuf.no_timer = 1;
 	c->jheads[GCHD].grouped = 0;
+
+	/*
+	 * Do not sync consolidation LEBs, those ones are synced
+	 * manually when there is enough consolidated data. In the
+	 * meantime, consolidated nodes are still available elsewhere.
+	 */
+	c->jheads[CONSOHD].wbuf.no_timer = 1;
+	c->jheads[CONSOHD].wbuf.manual_sync = 1;
 
 	return 0;
 }
@@ -1715,7 +1727,7 @@ out:
  */
 static void ubifs_remount_ro(struct ubifs_info *c)
 {
-	int i, err;
+	int err;
 
 	ubifs_assert(!c->need_recovery);
 	ubifs_assert(!c->ro_mount);
@@ -1728,8 +1740,7 @@ static void ubifs_remount_ro(struct ubifs_info *c)
 
 	dbg_save_space_info(c);
 
-	for (i = 0; i < c->jhead_cnt; i++)
-		ubifs_wbuf_sync(&c->jheads[i].wbuf);
+	ubifs_sync_all_wbufs_nolock(c);
 
 	c->mst_node->flags &= ~cpu_to_le32(UBIFS_MST_DIRTY);
 	c->mst_node->flags |= cpu_to_le32(UBIFS_MST_NO_ORPHS);
@@ -1795,8 +1806,7 @@ static void ubifs_put_super(struct super_block *sb)
 			int err;
 
 			/* Synchronize write-buffers */
-			for (i = 0; i < c->jhead_cnt; i++)
-				ubifs_wbuf_sync(&c->jheads[i].wbuf);
+			ubifs_sync_all_wbufs_nolock(c);
 
 			/*
 			 * We are being cleanly unmounted which means the

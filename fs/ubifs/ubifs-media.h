@@ -93,7 +93,7 @@
 #define UBIFS_MAX_NLEN 255
 
 /* Maximum number of data journal heads */
-#define UBIFS_MAX_JHEADS 1
+#define UBIFS_MAX_JHEADS 2
 
 /*
  * Size of UBIFS data block. Note, UBIFS is not a block oriented file-system,
@@ -141,6 +141,8 @@
 #define UBIFS_BASE_HEAD 1
 /* Data journal head number */
 #define UBIFS_DATA_HEAD 2
+/* Big data journal head number */
+#define UBIFS_CONSOLIDATED_HEAD 3
 
 /*
  * LEB Properties Tree node types.

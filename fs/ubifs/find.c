@@ -76,6 +76,8 @@ static int valuable(struct ubifs_info *c, const struct ubifs_lprops *lprops)
 		return 1;
 	case LPROPS_FRDI_IDX:
 		return 1;
+	case LPROPS_FULL:
+		return 1;
 	}
 	return 0;
 }
@@ -654,6 +656,86 @@ static const struct ubifs_lprops *scan_for_leb_for_idx(struct ubifs_info *c)
 	return lprops;
 }
 
+static const struct ubifs_lprops *ubifs_find_free_leb(struct ubifs_info *c)
+{
+	const struct ubifs_lprops *lprops = NULL;
+
+	lprops = ubifs_fast_find_empty(c);
+	if (lprops)
+		return lprops;
+
+	lprops = ubifs_fast_find_freeable(c);
+	if (lprops)
+		return lprops;
+
+	/*
+	 * The first condition means the following: go scan the
+	 * LPT if there are uncategorized lprops, which means
+	 * there may be freeable LEBs there (UBIFS does not
+	 * store the information about freeable LEBs in the
+	 * master node).
+	 */
+	if (c->in_a_category_cnt != c->main_lebs ||
+	    c->lst.empty_lebs - c->lst.taken_empty_lebs > 0) {
+		ubifs_assert(c->freeable_cnt == 0);
+		lprops = scan_for_leb_for_idx(c);
+	}
+
+	return lprops;
+}
+
+int ubifs_find_free_leb_for_data(struct ubifs_info *c)
+{
+	const struct ubifs_lprops *lprops;
+	int lnum = -1, err, flags;
+
+	ubifs_get_lprops(c);
+
+	lprops = ubifs_find_free_leb(c);
+	if (IS_ERR(lprops)) {
+		err = PTR_ERR(lprops);
+		goto out;
+	}
+
+	if (!lprops) {
+		err = -ENOSPC;
+		goto out;
+	}
+
+	lnum = lprops->lnum;
+
+	dbg_find("found LEB %d, free %d, dirty %d, flags %#x",
+		 lnum, lprops->free, lprops->dirty, lprops->flags);
+
+	flags = lprops->flags | LPROPS_TAKEN;
+	lprops = ubifs_change_lp(c, lprops, ubifs_leb_size(c, lprops->lnum),
+				 0, flags, 0);
+	if (IS_ERR(lprops)) {
+		err = PTR_ERR(lprops);
+		goto out;
+	}
+
+	ubifs_release_lprops(c);
+
+	/*
+	 * Ensure that empty LEBs have been unmapped. They may not have been,
+	 * for example, because of an unclean unmount. Also LEBs that were
+	 * freeable LEBs (free + dirty == leb_size) will not have been unmapped.
+	 */
+	err = ubifs_leb_unmap(c, lnum);
+	if (err) {
+		ubifs_change_one_lp(c, lnum, LPROPS_NC, LPROPS_NC, 0,
+				    LPROPS_TAKEN, 0);
+		return err;
+	}
+
+	return lnum;
+
+out:
+	ubifs_release_lprops(c);
+	return err;
+}
+
 /**
  * ubifs_find_free_leb_for_idx - find a free LEB for the index.
  * @c: the UBIFS file-system description object
@@ -677,27 +759,10 @@ int ubifs_find_free_leb_for_idx(struct ubifs_info *c)
 
 	ubifs_get_lprops(c);
 
-	lprops = ubifs_fast_find_empty(c);
-	if (!lprops) {
-		lprops = ubifs_fast_find_freeable(c);
-		if (!lprops) {
-			/*
-			 * The first condition means the following: go scan the
-			 * LPT if there are uncategorized lprops, which means
-			 * there may be freeable LEBs there (UBIFS does not
-			 * store the information about freeable LEBs in the
-			 * master node).
-			 */
-			if (c->in_a_category_cnt != c->main_lebs ||
-			    c->lst.empty_lebs - c->lst.taken_empty_lebs > 0) {
-				ubifs_assert(c->freeable_cnt == 0);
-				lprops = scan_for_leb_for_idx(c);
-				if (IS_ERR(lprops)) {
-					err = PTR_ERR(lprops);
-					goto out;
-				}
-			}
-		}
+	lprops = ubifs_find_free_leb(c);
+	if (IS_ERR(lprops)) {
+		err = PTR_ERR(lprops);
+		goto out;
 	}
 
 	if (!lprops) {
@@ -711,7 +776,8 @@ int ubifs_find_free_leb_for_idx(struct ubifs_info *c)
 		 lnum, lprops->free, lprops->dirty, lprops->flags);
 
 	flags = lprops->flags | LPROPS_TAKEN | LPROPS_INDEX;
-	lprops = ubifs_change_lp(c, lprops, c->leb_size, 0, flags, 0);
+	lprops = ubifs_change_lp(c, lprops, ubifs_leb_size(c, lprops->lnum),
+				 0, flags, 0);
 	if (IS_ERR(lprops)) {
 		err = PTR_ERR(lprops);
 		goto out;

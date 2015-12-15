@@ -2639,6 +2639,22 @@ int dbg_leb_map(struct ubifs_info *c, int lnum)
 	return 0;
 }
 
+int dbg_secure_leb_map(struct ubifs_info *c, int lnum)
+{
+	int err;
+
+	if (c->dbg->pc_happened)
+		return -EROFS;
+	if (power_cut_emulated(c, lnum, 0))
+		return -EROFS;
+	err = ubi_secure_leb_map(c->ubi, lnum);
+	if (err)
+		return err;
+	if (power_cut_emulated(c, lnum, 0))
+		return -EROFS;
+	return 0;
+}
+
 /*
  * Root directory for UBIFS stuff in debugfs. Contains sub-directories which
  * contain the stuff specific to particular file-system mounts.

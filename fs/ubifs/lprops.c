@@ -297,6 +297,9 @@ void ubifs_add_to_cat(struct ubifs_info *c, struct ubifs_lprops *lprops,
 	case LPROPS_FRDI_IDX:
 		list_add(&lprops->list, &c->frdi_idx_list);
 		break;
+	case LPROPS_FULL:
+		list_add(&lprops->list, &c->full_list);
+		break;
 	default:
 		ubifs_assert(0);
 	}
@@ -331,6 +334,7 @@ static void ubifs_remove_from_cat(struct ubifs_info *c,
 	case LPROPS_UNCAT:
 	case LPROPS_EMPTY:
 	case LPROPS_FRDI_IDX:
+	case LPROPS_FULL:
 		ubifs_assert(!list_empty(&lprops->list));
 		list_del(&lprops->list);
 		break;
@@ -368,6 +372,7 @@ void ubifs_replace_cat(struct ubifs_info *c, struct ubifs_lprops *old_lprops,
 	case LPROPS_EMPTY:
 	case LPROPS_FREEABLE:
 	case LPROPS_FRDI_IDX:
+	case LPROPS_FULL:
 		list_replace(&old_lprops->list, &new_lprops->list);
 		break;
 	default:
@@ -397,6 +402,22 @@ void ubifs_ensure_cat(struct ubifs_info *c, struct ubifs_lprops *lprops)
 	ubifs_add_to_cat(c, lprops, cat);
 }
 
+static int is_lprops_full(const struct ubifs_info *c,
+			  const struct ubifs_lprops *lprops)
+{
+	int leb_size = ubifs_leb_size(c, lprops->lnum);
+	int used = leb_size - lprops->dirty;
+
+	/*
+	 * Consolidated LEBs can only be consolidated again when they contain
+	 * less valid data than a secure LEB.
+	 */
+	if (used > c->leb_size)
+		return 0;
+
+	return used >= c->full_wm;
+}
+
 /**
  * ubifs_categorize_lprops - categorize LEB properties.
  * @c: UBIFS file-system description object
@@ -410,7 +431,7 @@ void ubifs_ensure_cat(struct ubifs_info *c, struct ubifs_lprops *lprops)
 int ubifs_categorize_lprops(const struct ubifs_info *c,
 			    const struct ubifs_lprops *lprops)
 {
-	if (lprops->flags & LPROPS_TAKEN)
+	if ((lprops->flags & LPROPS_TAKEN) || (lprops->flags & LPROPS_CONSO))
 		return LPROPS_UNCAT;
 
 	if (lprops->free == c->leb_size) {
@@ -434,6 +455,8 @@ int ubifs_categorize_lprops(const struct ubifs_info *c,
 			return LPROPS_DIRTY;
 		if (lprops->free > 0)
 			return LPROPS_FREE;
+		if (is_lprops_full(c, lprops))
+			return LPROPS_FULL;
 	}
 
 	return LPROPS_UNCAT;
@@ -852,6 +875,29 @@ const struct ubifs_lprops *ubifs_fast_find_frdi_idx(struct ubifs_info *c)
 	return lprops;
 }
 
+/**
+ * ubifs_fast_find_frdi_idx - try to find a freeable index LEB quickly.
+ * @c: the UBIFS file-system description object
+ *
+ * This function returns LEB properties for a freeable index LEB or %NULL if the
+ * function is unable to find a freeable index LEB quickly.
+ */
+const struct ubifs_lprops *ubifs_fast_find_full(struct ubifs_info *c)
+{
+	struct ubifs_lprops *lprops;
+
+	ubifs_assert(mutex_is_locked(&c->lp_mutex));
+
+	if (list_empty(&c->full_list))
+		return NULL;
+
+	lprops = list_entry(c->full_list.next, struct ubifs_lprops, list);
+	ubifs_assert(!(lprops->flags & LPROPS_TAKEN));
+	ubifs_assert((lprops->flags & LPROPS_INDEX));
+	ubifs_assert(ubifs_leb_size(c, lprops->lnum) - lprops->dirty >= c->full_wm);
+	return lprops;
+}
+
 /*
  * Everything below is related to debugging.
  */
@@ -932,6 +978,27 @@ int dbg_check_cats(struct ubifs_info *c)
 		}
 		if (!(lprops->flags & LPROPS_INDEX)) {
 			ubifs_err(c, "non-index LEB %d on frdi_idx list (free %d dirty %d flags %d)",
+				  lprops->lnum, lprops->free, lprops->dirty,
+				  lprops->flags);
+			return -EINVAL;
+		}
+	}
+
+	list_for_each_entry(lprops, &c->full_list, list) {
+		if (is_lprops_full(c, lprops)) {
+			ubifs_err(c, "non-full LEB %d in full list (free %d dirty %d flags %d)",
+				  lprops->lnum, lprops->free, lprops->dirty,
+				  lprops->flags);
+			return -EINVAL;
+		}
+		if (lprops->flags & LPROPS_TAKEN) {
+			ubifs_err(c, "taken LEB %d in full list (free %d dirty %d flags %d)",
+				  lprops->lnum, lprops->free, lprops->dirty,
+				  lprops->flags);
+			return -EINVAL;
+		}
+		if (lprops->flags & LPROPS_INDEX) {
+			ubifs_err(c, "index LEB %d in full list (free %d dirty %d flags %d)",
 				  lprops->lnum, lprops->free, lprops->dirty,
 				  lprops->flags);
 			return -EINVAL;
@@ -1058,6 +1125,9 @@ static int scan_check_cb(struct ubifs_info *c,
 			break;
 		case LPROPS_FRDI_IDX:
 			list = &c->frdi_idx_list;
+			break;
+		case LPROPS_FULL:
+			list = &c->full_list;
 			break;
 		case LPROPS_UNCAT:
 			list = &c->uncat_list;
@@ -1265,7 +1335,7 @@ out:
  */
 int dbg_check_lprops(struct ubifs_info *c)
 {
-	int i, err;
+	int err;
 	struct ubifs_lp_stats lst;
 
 	if (!dbg_is_chk_lprops(c))
@@ -1275,11 +1345,9 @@ int dbg_check_lprops(struct ubifs_info *c)
 	 * As we are going to scan the media, the write buffers have to be
 	 * synchronized.
 	 */
-	for (i = 0; i < c->jhead_cnt; i++) {
-		err = ubifs_wbuf_sync(&c->jheads[i].wbuf);
-		if (err)
-			return err;
-	}
+	err = ubifs_sync_all_wbufs_nolock(c);
+	if (err)
+		return err;
 
 	memset(&lst, 0, sizeof(struct ubifs_lp_stats));
 	err = ubifs_lpt_scan_nolock(c, c->main_first, c->leb_cnt - 1,
