@@ -244,12 +244,14 @@ static int do_write_orph_node(struct ubifs_info *c, int len, int atomic)
 	int err = 0;
 
 	if (atomic) {
-		ubifs_assert(c->ohead_offs == 0);
-		ubifs_prepare_node(c, c->orph_buf, len, 1);
+		ubifs_assert(c->ohead_offs == c->secure_leb_offs);
+		ubifs_prepare_node(c, c->orph_buf + c->secure_leb_offs,
+				   len, 1);
 		len = ALIGN(len, c->min_io_size);
-		err = ubifs_leb_change(c, c->ohead_lnum, c->orph_buf, len);
+		err = ubifs_leb_change(c, c->ohead_lnum,
+				       c->orph_buf + c->secure_leb_offs, len);
 	} else {
-		if (c->ohead_offs == 0) {
+		if (c->ohead_offs == c->secure_leb_offs) {
 			/* Ensure LEB has been unmapped */
 			err = ubifs_leb_unmap(c, c->ohead_lnum);
 			if (err)
@@ -280,7 +282,7 @@ static int write_orph_node(struct ubifs_info *c, int atomic)
 	gap = c->leb_size - c->ohead_offs;
 	if (gap < UBIFS_ORPH_NODE_SZ + sizeof(__le64)) {
 		c->ohead_lnum += 1;
-		c->ohead_offs = 0;
+		c->ohead_offs = c->secure_leb_offs;
 		gap = c->leb_size;
 		if (c->ohead_lnum > c->orph_last) {
 			/*
@@ -296,7 +298,7 @@ static int write_orph_node(struct ubifs_info *c, int atomic)
 		cnt = c->cmt_orphans;
 	len = UBIFS_ORPH_NODE_SZ + cnt * sizeof(__le64);
 	ubifs_assert(c->orph_buf);
-	orph = c->orph_buf;
+	orph = c->orph_buf + c->secure_leb_offs;
 	orph->ch.node_type = UBIFS_ORPH_NODE;
 	spin_lock(&c->orphan_lock);
 	cnext = c->orph_cnext;
@@ -391,7 +393,7 @@ static int consolidate(struct ubifs_info *c)
 		ubifs_assert(cnt == c->tot_orphans - c->new_orphans);
 		c->cmt_orphans = cnt;
 		c->ohead_lnum = c->orph_first;
-		c->ohead_offs = 0;
+		c->ohead_offs = c->secure_leb_offs;
 	} else {
 		/*
 		 * We limit the number of orphans so that this should
@@ -496,7 +498,7 @@ int ubifs_clear_orphans(struct ubifs_info *c)
 			return err;
 	}
 	c->ohead_lnum = c->orph_first;
-	c->ohead_offs = 0;
+	c->ohead_offs = c->secure_leb_offs;
 	return 0;
 }
 
@@ -650,7 +652,7 @@ static int kill_orphans(struct ubifs_info *c)
 	int lnum, err = 0, outofdate = 0, last_flagged = 0;
 
 	c->ohead_lnum = c->orph_first;
-	c->ohead_offs = 0;
+	c->ohead_offs = c->secure_leb_offs;
 	/* Check no-orphans flag and skip this if no orphans */
 	if (c->no_orphs) {
 		dbg_rcvry("no orphans");

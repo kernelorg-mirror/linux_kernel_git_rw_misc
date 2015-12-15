@@ -595,6 +595,27 @@ static int calc_pnode_num_from_parent(const struct ubifs_info *c,
 	return num;
 }
 
+static int ubifs_lpt_reserve(struct ubifs_info *c, int *lnum, int sz,
+			     void *buf, int *offset)
+{
+	int alen, err;
+
+	if (*offset + sz <= c->leb_size)
+		return 0;
+
+	alen = ALIGN(*offset, c->min_io_size);
+	set_ltab(c, *lnum, c->leb_size - alen, alen - *offset);
+	memset(buf + *offset, 0xff, alen - *offset);
+
+	err = ubifs_leb_change(c, *lnum++, buf, alen);
+	if (err)
+		return err;
+
+	*offset = c->secure_leb_offs;
+
+	return 0;
+}
+
 /**
  * ubifs_create_dflt_lpt - create default LPT.
  * @c: UBIFS file-system description object
@@ -608,11 +629,11 @@ static int calc_pnode_num_from_parent(const struct ubifs_info *c,
 int ubifs_create_dflt_lpt(struct ubifs_info *c, int *main_lebs, int lpt_first,
 			  int *lpt_lebs, int *big_lpt)
 {
-	int lnum, err = 0, node_sz, iopos, i, j, cnt, len, alen, row;
+	int lnum, err = 0, node_sz, iopos, i, j, cnt, offs, alen, row;
 	int blnum, boffs, bsz, bcnt;
 	struct ubifs_pnode *pnode = NULL;
 	struct ubifs_nnode *nnode = NULL;
-	void *buf = NULL, *p;
+	void *buf = NULL;
 	struct ubifs_lpt_lprops *ltab = NULL;
 	int *lsave = NULL;
 
@@ -650,7 +671,7 @@ int ubifs_create_dflt_lpt(struct ubifs_info *c, int *main_lebs, int lpt_first,
 	}
 
 	lnum = lpt_first;
-	p = buf;
+	offs = c->secure_leb_offs;
 	/* Number of leaf nodes (pnodes) */
 	cnt = c->pnode_cnt;
 
@@ -673,9 +694,8 @@ int ubifs_create_dflt_lpt(struct ubifs_info *c, int *main_lebs, int lpt_first,
 		pnode->lprops[i].free = c->leb_size;
 
 	/* Add first pnode */
-	ubifs_pack_pnode(c, p, pnode);
-	p += c->pnode_sz;
-	len = c->pnode_sz;
+	ubifs_pack_pnode(c, buf + offs, pnode);
+	offs = c->pnode_sz;
 	pnode->num += 1;
 
 	/* Reset pnode values for remaining pnodes */
@@ -697,19 +717,12 @@ int ubifs_create_dflt_lpt(struct ubifs_info *c, int *main_lebs, int lpt_first,
 
 	/* Add all remaining pnodes */
 	for (i = 1; i < cnt; i++) {
-		if (len + c->pnode_sz > c->leb_size) {
-			alen = ALIGN(len, c->min_io_size);
-			set_ltab(c, lnum, c->leb_size - alen, alen - len);
-			memset(p, 0xff, alen - len);
-			err = ubifs_leb_change(c, lnum++, buf, alen);
-			if (err)
-				goto out;
-			p = buf;
-			len = 0;
-		}
-		ubifs_pack_pnode(c, p, pnode);
-		p += c->pnode_sz;
-		len += c->pnode_sz;
+		err = ubifs_lpt_reserve(c, &lnum, c->pnode_sz, buf, &offs);
+		if (err)
+			goto out;
+
+		ubifs_pack_pnode(c, buf + offs, pnode);
+		offs += c->pnode_sz;
 		/*
 		 * pnodes are simply numbered left to right starting at zero,
 		 * which means the pnode number can be used easily to traverse
@@ -726,21 +739,15 @@ int ubifs_create_dflt_lpt(struct ubifs_info *c, int *main_lebs, int lpt_first,
 		/* Number of internal nodes (nnodes) at next level */
 		cnt = DIV_ROUND_UP(cnt, UBIFS_LPT_FANOUT);
 		for (i = 0; i < cnt; i++) {
-			if (len + c->nnode_sz > c->leb_size) {
-				alen = ALIGN(len, c->min_io_size);
-				set_ltab(c, lnum, c->leb_size - alen,
-					    alen - len);
-				memset(p, 0xff, alen - len);
-				err = ubifs_leb_change(c, lnum++, buf, alen);
-				if (err)
-					goto out;
-				p = buf;
-				len = 0;
-			}
+			err = ubifs_lpt_reserve(c, &lnum, c->nnode_sz, buf,
+						&offs);
+			if (err)
+				goto out;
+
 			/* Only 1 nnode at this level, so it is the root */
 			if (cnt == 1) {
 				c->lpt_lnum = lnum;
-				c->lpt_offs = len;
+				c->lpt_offs = offs;
 			}
 			/* Set branches to the level below */
 			for (j = 0; j < UBIFS_LPT_FANOUT; j++) {
@@ -759,9 +766,8 @@ int ubifs_create_dflt_lpt(struct ubifs_info *c, int *main_lebs, int lpt_first,
 				}
 			}
 			nnode->num = calc_nnode_num(row, i);
-			ubifs_pack_nnode(c, p, nnode);
-			p += c->nnode_sz;
-			len += c->nnode_sz;
+			ubifs_pack_nnode(c, buf + offs, nnode);
+			offs += c->nnode_sz;
 		}
 		/* Only 1 nnode at this level, so it is the root */
 		if (cnt == 1)
@@ -773,62 +779,46 @@ int ubifs_create_dflt_lpt(struct ubifs_info *c, int *main_lebs, int lpt_first,
 	}
 
 	if (*big_lpt) {
-		/* Need to add LPT's save table */
-		if (len + c->lsave_sz > c->leb_size) {
-			alen = ALIGN(len, c->min_io_size);
-			set_ltab(c, lnum, c->leb_size - alen, alen - len);
-			memset(p, 0xff, alen - len);
-			err = ubifs_leb_change(c, lnum++, buf, alen);
-			if (err)
-				goto out;
-			p = buf;
-			len = 0;
-		}
+		err = ubifs_lpt_reserve(c, &lnum, c->lsave_sz, buf, &offs);
+		if (err)
+			goto out;
 
 		c->lsave_lnum = lnum;
-		c->lsave_offs = len;
+		c->lsave_offs = offs;
 
 		for (i = 0; i < c->lsave_cnt && i < *main_lebs; i++)
 			lsave[i] = c->main_first + i;
 		for (; i < c->lsave_cnt; i++)
 			lsave[i] = c->main_first;
 
-		ubifs_pack_lsave(c, p, lsave);
-		p += c->lsave_sz;
-		len += c->lsave_sz;
+		ubifs_pack_lsave(c, buf + offs, lsave);
+		offs += c->lsave_sz;
 	}
 
 	/* Need to add LPT's own LEB properties table */
-	if (len + c->ltab_sz > c->leb_size) {
-		alen = ALIGN(len, c->min_io_size);
-		set_ltab(c, lnum, c->leb_size - alen, alen - len);
-		memset(p, 0xff, alen - len);
-		err = ubifs_leb_change(c, lnum++, buf, alen);
-		if (err)
-			goto out;
-		p = buf;
-		len = 0;
-	}
+	err = ubifs_lpt_reserve(c, &lnum, c->ltab_sz, buf, &offs);
+	if (err)
+		goto out;
 
 	c->ltab_lnum = lnum;
-	c->ltab_offs = len;
+	c->ltab_offs = offs;
 
 	/* Update ltab before packing it */
-	len += c->ltab_sz;
-	alen = ALIGN(len, c->min_io_size);
-	set_ltab(c, lnum, c->leb_size - alen, alen - len);
+	offs += c->ltab_sz;
+	alen = ALIGN(offs, c->min_io_size);
+	set_ltab(c, lnum, c->leb_size - alen, alen - offs);
 
-	ubifs_pack_ltab(c, p, ltab);
-	p += c->ltab_sz;
+	ubifs_pack_ltab(c, buf + offs, ltab);
+	offs += c->ltab_sz;
 
 	/* Write remaining buffer */
-	memset(p, 0xff, alen - len);
+	memset(buf + offs, 0xff, alen - offs);
 	err = ubifs_leb_change(c, lnum, buf, alen);
 	if (err)
 		goto out;
 
 	c->nhead_lnum = lnum;
-	c->nhead_offs = ALIGN(len, c->min_io_size);
+	c->nhead_offs = ALIGN(c->secure_leb_offs + offs, c->min_io_size);
 
 	dbg_lp("space_bits %d", c->space_bits);
 	dbg_lp("lpt_lnum_bits %d", c->lpt_lnum_bits);

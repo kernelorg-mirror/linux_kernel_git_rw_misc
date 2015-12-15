@@ -381,7 +381,7 @@ static int write_cnodes(struct ubifs_info *c)
 	offs = c->nhead_offs;
 	from = offs;
 	/* Ensure empty LEB is unmapped */
-	if (offs == 0) {
+	if (offs == c->secure_leb_offs) {
 		err = ubifs_leb_unmap(c, lnum);
 		if (err)
 			return err;

@@ -194,7 +194,8 @@ static int create_default_filesystem(struct ubifs_info *c)
 	sup->rp_size = cpu_to_le64(tmp64);
 	sup->ro_compat_version = cpu_to_le32(UBIFS_RO_COMPAT_VERSION);
 
-	err = ubifs_write_node(c, sup, UBIFS_SB_NODE_SZ, 0, 0);
+	err = ubifs_write_node(c, sup, UBIFS_SB_NODE_SZ, 0,
+			       c->secure_leb_offs);
 	kfree(sup);
 	if (err)
 		return err;
@@ -211,12 +212,13 @@ static int create_default_filesystem(struct ubifs_info *c)
 	mst->highest_inum = cpu_to_le64(UBIFS_FIRST_INO);
 	mst->cmt_no       = 0;
 	mst->root_lnum    = cpu_to_le32(main_first + DEFAULT_IDX_LEB);
-	mst->root_offs    = 0;
+	mst->root_offs    = c->secure_leb_offs;
 	tmp = ubifs_idx_node_sz(c, 1);
 	mst->root_len     = cpu_to_le32(tmp);
 	mst->gc_lnum      = cpu_to_le32(main_first + DEFAULT_GC_LEB);
 	mst->ihead_lnum   = cpu_to_le32(main_first + DEFAULT_IDX_LEB);
-	mst->ihead_offs   = cpu_to_le32(ALIGN(tmp, c->min_io_size));
+	mst->ihead_offs   = mst->root_offs +
+			    cpu_to_le32(ALIGN(tmp, c->min_io_size));
 	mst->index_size   = cpu_to_le64(ALIGN(tmp, 8));
 	mst->lpt_lnum     = cpu_to_le32(c->lpt_lnum);
 	mst->lpt_offs     = cpu_to_le32(c->lpt_offs);
@@ -250,13 +252,14 @@ static int create_default_filesystem(struct ubifs_info *c)
 
 	mst->total_used = cpu_to_le64(UBIFS_INO_NODE_SZ);
 
-	err = ubifs_write_node(c, mst, UBIFS_MST_NODE_SZ, UBIFS_MST_LNUM, 0);
+	err = ubifs_write_node(c, mst, UBIFS_MST_NODE_SZ, UBIFS_MST_LNUM,
+			       c->secure_leb_offs);
 	if (err) {
 		kfree(mst);
 		return err;
 	}
 	err = ubifs_write_node(c, mst, UBIFS_MST_NODE_SZ, UBIFS_MST_LNUM + 1,
-			       0);
+			       c->secure_leb_offs);
 	kfree(mst);
 	if (err)
 		return err;
@@ -279,7 +282,8 @@ static int create_default_filesystem(struct ubifs_info *c)
 	key_write_idx(c, &key, &br->key);
 	br->lnum = cpu_to_le32(main_first + DEFAULT_DATA_LEB);
 	br->len  = cpu_to_le32(UBIFS_INO_NODE_SZ);
-	err = ubifs_write_node(c, idx, tmp, main_first + DEFAULT_IDX_LEB, 0);
+	err = ubifs_write_node(c, idx, tmp, main_first + DEFAULT_IDX_LEB,
+			       c->secure_leb_offs);
 	kfree(idx);
 	if (err)
 		return err;
@@ -311,7 +315,8 @@ static int create_default_filesystem(struct ubifs_info *c)
 	ino->flags = cpu_to_le32(UBIFS_COMPR_FL);
 
 	err = ubifs_write_node(c, ino, UBIFS_INO_NODE_SZ,
-			       main_first + DEFAULT_DATA_LEB, 0);
+			       main_first + DEFAULT_DATA_LEB,
+			       c->secure_leb_offs);
 	kfree(ino);
 	if (err)
 		return err;
@@ -330,7 +335,8 @@ static int create_default_filesystem(struct ubifs_info *c)
 		return -ENOMEM;
 
 	cs->ch.node_type = UBIFS_CS_NODE;
-	err = ubifs_write_node(c, cs, UBIFS_CS_NODE_SZ, UBIFS_LOG_LNUM, 0);
+	err = ubifs_write_node(c, cs, UBIFS_CS_NODE_SZ, UBIFS_LOG_LNUM,
+			       c->secure_leb_offs);
 	kfree(cs);
 	if (err)
 		return err;

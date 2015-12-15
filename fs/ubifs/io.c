@@ -133,6 +133,12 @@ int ubifs_leb_write(struct ubifs_info *c, int lnum, const void *buf, int offs,
 			return err;
 	}
 
+	/* Adjust LEB offset if we're using a secure LEB */
+	if (ubi_is_secure(c->ubi, lnum))
+		offs -= c->secure_leb_offs;
+
+	ubifs_assert(offs >= 0);
+
 	if (!dbg_is_tst_rcvry(c))
 		err = ubi_leb_write(c->ubi, lnum, buf, offs, len);
 	else
@@ -155,7 +161,13 @@ int ubifs_leb_change(struct ubifs_info *c, int lnum, const void *buf, int len)
 		return -EROFS;
 
 	if (!ubi_is_mapped(c->ubi, lnum))
-		return ubifs_leb_write(c, lnum, buf, 0, len);
+		return ubifs_leb_write(c, lnum, buf + c->secure_leb_offs,
+				       c->secure_leb_offs, len);
+
+	if (ubi_is_secure(c->ubi, lnum)) {
+		buf += c->secure_leb_offs;
+		len -= c->secure_leb_offs;
+	}
 
 	if (!dbg_is_tst_rcvry(c))
 		err = ubi_leb_change(c->ubi, lnum, buf, len);
@@ -620,6 +632,8 @@ int ubifs_wbuf_seek_nolock(struct ubifs_wbuf *wbuf, int lnum, int offs)
 	dbg_io("LEB %d:%d, jhead %s", lnum, offs, dbg_jhead(wbuf->jhead));
 	ubifs_assert(lnum >= 0 && lnum < c->leb_cnt);
 	ubifs_assert(offs >= 0 && offs <= c->leb_size);
+	ubifs_assert(!ubi_is_secure(c->ubi, lnum) ||
+		     offs >= c->secure_leb_offs);
 	ubifs_assert(offs % c->min_io_size == 0 && !(offs & 7));
 	ubifs_assert(lnum != wbuf->lnum);
 	ubifs_assert(wbuf->used == 0);

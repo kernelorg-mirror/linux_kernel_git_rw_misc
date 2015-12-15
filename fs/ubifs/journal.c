@@ -197,7 +197,7 @@ again:
 		return 0;
 	}
 
-	offs = 0;
+	offs = c->secure_leb_offs;
 
 out:
 	/*

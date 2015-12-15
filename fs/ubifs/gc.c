@@ -109,7 +109,7 @@ static int switch_gc_head(struct ubifs_info *c)
 		return err;
 
 	c->gc_lnum = -1;
-	err = ubifs_wbuf_seek_nolock(wbuf, gc_lnum, 0);
+	err = ubifs_wbuf_seek_nolock(wbuf, gc_lnum, c->secure_leb_offs);
 	return err;
 }
 

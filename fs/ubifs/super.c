@@ -512,6 +512,7 @@ static int init_constants_early(struct ubifs_info *c)
 	c->leb_size = c->vi.usable_leb_size;
 	c->leb_start = c->di.leb_start;
 	c->half_leb_size = c->leb_size / 2;
+	c->secure_leb_offs = c->leb_size - c->vi.usable_secure_leb_size;
 	c->min_io_size = c->di.min_io_size;
 	c->min_io_shift = fls(c->min_io_size) - 1;
 	c->max_write_size = c->di.max_write_size;

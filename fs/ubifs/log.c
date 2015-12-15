@@ -420,7 +420,7 @@ int ubifs_log_start_commit(struct ubifs_info *c, int *ltail_lnum)
 
 	len = ALIGN(len, c->min_io_size);
 	dbg_log("writing commit start at LEB %d:0, len %d", c->lhead_lnum, len);
-	err = ubifs_leb_write(c, c->lhead_lnum, cs, 0, len);
+	err = ubifs_leb_write(c, c->lhead_lnum, cs, c->secure_leb_offs, len);
 	if (err)
 		goto out;
 
@@ -613,7 +613,7 @@ static int add_node(struct ubifs_info *c, void *buf, int *lnum, int *offs,
 		if (err)
 			return err;
 		*lnum = ubifs_next_log_lnum(c, *lnum);
-		*offs = 0;
+		*offs = c->secure_leb_offs;
 	}
 	memcpy(buf + *offs, node, len);
 	*offs += ALIGN(len, 8);
@@ -635,7 +635,7 @@ int ubifs_consolidate_log(struct ubifs_info *c)
 	struct ubifs_scan_leb *sleb;
 	struct ubifs_scan_node *snod;
 	struct rb_root done_tree = RB_ROOT;
-	int lnum, err, first = 1, write_lnum, offs = 0;
+	int lnum, err, first = 1, write_lnum, offs = c->secure_leb_offs;
 	void *buf;
 
 	dbg_rcvry("log tail LEB %d, log head LEB %d", c->ltail_lnum,
@@ -645,6 +645,7 @@ int ubifs_consolidate_log(struct ubifs_info *c)
 		return -ENOMEM;
 	lnum = c->ltail_lnum;
 	write_lnum = lnum;
+
 	while (1) {
 		sleb = ubifs_scan(c, lnum, 0, c->sbuf, 0);
 		if (IS_ERR(sleb)) {
@@ -684,7 +685,7 @@ int ubifs_consolidate_log(struct ubifs_info *c)
 			break;
 		lnum = ubifs_next_log_lnum(c, lnum);
 	}
-	if (offs) {
+	if (offs != c->secure_leb_offs) {
 		int sz = ALIGN(offs, c->min_io_size);
 
 		ubifs_pad(c, buf + offs, sz - offs);
