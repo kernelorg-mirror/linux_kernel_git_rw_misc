@@ -1497,6 +1497,8 @@ extern struct ubifs_compressor *ubifs_compressors[UBIFS_COMPR_TYPES_CNT];
 void ubifs_ro_mode(struct ubifs_info *c, int err);
 int ubifs_leb_read(const struct ubifs_info *c, int lnum, void *buf, int offs,
 		   int len, int even_ebadmsg);
+void ubifs_leb_info(const struct ubifs_info *c, int lnum, int *offs,
+		    int *size);
 int ubifs_leb_write(struct ubifs_info *c, int lnum, const void *buf, int offs,
 		    int len);
 int ubifs_leb_change(struct ubifs_info *c, int lnum, const void *buf, int len);

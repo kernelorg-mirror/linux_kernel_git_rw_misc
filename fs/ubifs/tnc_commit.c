@@ -414,7 +414,7 @@ static int layout_in_empty_space(struct ubifs_info *c)
 {
 	struct ubifs_znode *znode, *cnext, *zp;
 	int lnum, offs, len, next_len, buf_len, buf_offs, used, avail;
-	int wlen, blen, err;
+	int wlen, blen, err, lebsize;
 
 	cnext = c->enext;
 	if (!cnext)
@@ -445,6 +445,7 @@ static int layout_in_empty_space(struct ubifs_info *c)
 				return -ENOSPC;
 			}
 			lnum = c->ilebs[c->ileb_nxt++];
+			ubifs_leb_info(c, lnum, &buf_offs, &lebsize);
 			buf_offs = 0;
 			used = 0;
 			avail = buf_len;

@@ -598,7 +598,7 @@ static int calc_pnode_num_from_parent(const struct ubifs_info *c,
 static int ubifs_lpt_reserve(struct ubifs_info *c, int *lnum, int sz,
 			     void *buf, int *offset)
 {
-	int alen, err;
+	int alen, err, lebsize;
 
 	if (*offset + sz <= c->leb_size)
 		return 0;
@@ -611,7 +611,7 @@ static int ubifs_lpt_reserve(struct ubifs_info *c, int *lnum, int sz,
 	if (err)
 		return err;
 
-	*offset = c->secure_leb_offs;
+	ubifs_leb_info(c, lnum, offset, &lebsize);
 
 	return 0;
 }
@@ -630,7 +630,7 @@ int ubifs_create_dflt_lpt(struct ubifs_info *c, int *main_lebs, int lpt_first,
 			  int *lpt_lebs, int *big_lpt)
 {
 	int lnum, err = 0, node_sz, iopos, i, j, cnt, offs, alen, row;
-	int blnum, boffs, bsz, bcnt;
+	int blnum, boffs, bsz, bcnt, lebsize;
 	struct ubifs_pnode *pnode = NULL;
 	struct ubifs_nnode *nnode = NULL;
 	void *buf = NULL;
@@ -671,7 +671,7 @@ int ubifs_create_dflt_lpt(struct ubifs_info *c, int *main_lebs, int lpt_first,
 	}
 
 	lnum = lpt_first;
-	offs = c->secure_leb_offs;
+	ubifs_leb_info(c, lnum, &boffs, &lebsize);
 	/* Number of leaf nodes (pnodes) */
 	cnt = c->pnode_cnt;
 
@@ -711,7 +711,7 @@ int ubifs_create_dflt_lpt(struct ubifs_info *c, int *main_lebs, int lpt_first,
 	 * the level below.
 	 */
 	blnum = lnum; /* LEB number of level below */
-	boffs = 0; /* Offset of level below */
+	ubifs_leb_info(c, lnum, &boffs, &lebsize);
 	bcnt = cnt; /* Number of nodes in level below */
 	bsz = c->pnode_sz; /* Size of nodes in level below */
 

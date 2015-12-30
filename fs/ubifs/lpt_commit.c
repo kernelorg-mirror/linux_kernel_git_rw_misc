@@ -192,7 +192,7 @@ static int alloc_lpt_leb(struct ubifs_info *c, int *lnum)
  */
 static int layout_cnodes(struct ubifs_info *c)
 {
-	int lnum, offs, len, alen, done_lsave, done_ltab, err;
+	int lnum, offs, len, alen, done_lsave, done_ltab, err, lebsize;
 	struct ubifs_cnode *cnode;
 
 	err = dbg_chk_lpt_sz(c, 0, 0);
@@ -237,7 +237,7 @@ static int layout_cnodes(struct ubifs_info *c)
 			err = alloc_lpt_leb(c, &lnum);
 			if (err)
 				goto no_space;
-			offs = 0;
+			ubifs_leb_info(c, lnum, &offs, &lebsize);
 			ubifs_assert(lnum >= c->lpt_first &&
 				     lnum <= c->lpt_last);
 			/* Try to place lsave and ltab nicely */
@@ -280,7 +280,7 @@ static int layout_cnodes(struct ubifs_info *c)
 			err = alloc_lpt_leb(c, &lnum);
 			if (err)
 				goto no_space;
-			offs = 0;
+			ubifs_leb_info(c, lnum, &offs, &lebsize);
 			ubifs_assert(lnum >= c->lpt_first &&
 				     lnum <= c->lpt_last);
 		}
@@ -300,7 +300,7 @@ static int layout_cnodes(struct ubifs_info *c)
 			err = alloc_lpt_leb(c, &lnum);
 			if (err)
 				goto no_space;
-			offs = 0;
+			ubifs_leb_info(c, lnum, &offs, &lebsize);
 			ubifs_assert(lnum >= c->lpt_first &&
 				     lnum <= c->lpt_last);
 		}
@@ -1147,12 +1147,13 @@ static int is_a_node(const struct ubifs_info *c, uint8_t *buf, int len)
  */
 static int lpt_gc_lnum(struct ubifs_info *c, int lnum)
 {
-	int err, len = c->leb_size, node_type, node_num, node_len, offs;
+	int err, len, node_type, node_num, node_len, offs;
 	void *buf = c->lpt_buf;
 
 	dbg_lp("LEB %d", lnum);
 
-	err = ubifs_leb_read(c, lnum, buf, 0, c->leb_size, 1);
+	ubifs_leb_info(c, lnum, &offs, &len);
+	err = ubifs_leb_read(c, lnum, buf, offs, len, 1);
 	if (err)
 		return err;
 
@@ -1629,7 +1630,7 @@ static int dbg_is_node_dirty(struct ubifs_info *c, int node_type, int lnum,
  */
 static int dbg_check_ltab_lnum(struct ubifs_info *c, int lnum)
 {
-	int err, len = c->leb_size, dirty = 0, node_type, node_num, node_len;
+	int err, len, dirty = 0, node_type, node_num, node_len, offs;
 	int ret;
 	void *buf, *p;
 
@@ -1644,7 +1645,8 @@ static int dbg_check_ltab_lnum(struct ubifs_info *c, int lnum)
 
 	dbg_lp("LEB %d", lnum);
 
-	err = ubifs_leb_read(c, lnum, buf, 0, c->leb_size, 1);
+	ubifs_leb_info(c, lnum, &offs, &len);
+	err = ubifs_leb_read(c, lnum, buf, offs, len, 1);
 	if (err)
 		goto out;
 
@@ -1881,7 +1883,7 @@ int dbg_chk_lpt_sz(struct ubifs_info *c, int action, int len)
  */
 static void dump_lpt_leb(const struct ubifs_info *c, int lnum)
 {
-	int err, len = c->leb_size, node_type, node_num, node_len, offs;
+	int err, len, node_type, node_num, node_len, offs;
 	void *buf, *p;
 
 	pr_err("(pid %d) start dumping LEB %d\n", current->pid, lnum);
@@ -1891,7 +1893,8 @@ static void dump_lpt_leb(const struct ubifs_info *c, int lnum)
 		return;
 	}
 
-	err = ubifs_leb_read(c, lnum, buf, 0, c->leb_size, 1);
+	ubifs_leb_info(c, lnum, &offs, &len);
+	err = ubifs_leb_read(c, lnum, buf, offs, len, 1);
 	if (err)
 		goto out;
 

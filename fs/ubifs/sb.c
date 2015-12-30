@@ -674,7 +674,7 @@ out:
  */
 static int fixup_leb(struct ubifs_info *c, int lnum, int len)
 {
-	int err;
+	int err, leboffs, lebsize;
 
 	ubifs_assert(len >= 0);
 	ubifs_assert(len % c->min_io_size == 0);
@@ -686,7 +686,9 @@ static int fixup_leb(struct ubifs_info *c, int lnum, int len)
 	}
 
 	dbg_mnt("fixup LEB %d, data len %d", lnum, len);
-	err = ubifs_leb_read(c, lnum, c->sbuf, 0, len, 1);
+	ubifs_leb_info(c, lnum, &leboffs, &lebsize);
+	ubifs_assert(len <= lebsize);
+	err = ubifs_leb_read(c, lnum, c->sbuf, leboffs, len, 1);
 	if (err)
 		return err;
 

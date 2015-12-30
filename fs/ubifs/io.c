@@ -90,6 +90,17 @@ void ubifs_ro_mode(struct ubifs_info *c, int err)
 	}
 }
 
+void ubifs_leb_info(const struct ubifs_info *c, int lnum, int *offs, int *size)
+{
+	if (!ubifs_is_mapped(c, lnum) || ubi_is_secure(c->ubi, lnum)) {
+		*offs = c->secure_leb_offs;
+		*size = c->leb_size - *offs;
+	} else {
+		*size = c->leb_size;
+		*offs = 0;
+	}
+}
+
 /*
  * Below are simple wrappers over UBI I/O functions which include some
  * additional checks and UBIFS debugging stuff. See corresponding UBI function
@@ -100,6 +111,11 @@ int ubifs_leb_read(const struct ubifs_info *c, int lnum, void *buf, int offs,
 		   int len, int even_ebadmsg)
 {
 	int err;
+
+	if (ubi_is_secure(c->ubi, lnum)) {
+		ubifs_assert(offs >= c->secure_leb_offs);
+		offs -= c->secure_leb_offs;
+	}
 
 	err = ubi_read(c->ubi, lnum, buf, offs, len);
 	/*
@@ -134,8 +150,10 @@ int ubifs_leb_write(struct ubifs_info *c, int lnum, const void *buf, int offs,
 	}
 
 	/* Adjust LEB offset if we're using a secure LEB */
-	if (ubi_is_secure(c->ubi, lnum))
+	if (ubi_is_secure(c->ubi, lnum)) {
+		ubifs_assert(offs >= c->secure_leb_offs);
 		offs -= c->secure_leb_offs;
+	}
 
 	ubifs_assert(offs >= 0);
 
@@ -160,14 +178,15 @@ int ubifs_leb_change(struct ubifs_info *c, int lnum, const void *buf, int len)
 	if (c->ro_error)
 		return -EROFS;
 
-	if (!ubi_is_mapped(c->ubi, lnum))
+	if (!ubi_is_mapped(c->ubi, lnum)) {
+		ubifs_assert(len <= c->leb_size - c->secure_leb_offs);
+
 		return ubifs_leb_write(c, lnum, buf + c->secure_leb_offs,
 				       c->secure_leb_offs, len);
-
-	if (ubi_is_secure(c->ubi, lnum)) {
-		buf += c->secure_leb_offs;
-		len -= c->secure_leb_offs;
 	}
+
+	if (ubi_is_secure(c->ubi, lnum))
+		ubifs_assert(len <= c->leb_size - c->secure_leb_offs);
 
 	if (!dbg_is_tst_rcvry(c))
 		err = ubi_leb_change(c->ubi, lnum, buf, len);

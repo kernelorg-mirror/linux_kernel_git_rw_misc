@@ -138,7 +138,7 @@ struct ubifs_scan_leb *ubifs_start_scan(const struct ubifs_info *c, int lnum,
 					int offs, void *sbuf)
 {
 	struct ubifs_scan_leb *sleb;
-	int err;
+	int err, leboffs, lebsize;
 
 	dbg_scan("scan LEB %d:%d", lnum, offs);
 
@@ -150,6 +150,8 @@ struct ubifs_scan_leb *ubifs_start_scan(const struct ubifs_info *c, int lnum,
 	INIT_LIST_HEAD(&sleb->nodes);
 	sleb->buf = sbuf;
 
+	ubifs_leb_info(c, lnum, &leboffs, &lebsize);
+	ubifs_assert(offs >= leboffs);
 	err = ubifs_leb_read(c, lnum, sbuf + offs, offs, c->leb_size - offs, 0);
 	if (err && err != -EBADMSG) {
 		ubifs_err(c, "cannot read %d bytes from LEB %d:%d, error %d",

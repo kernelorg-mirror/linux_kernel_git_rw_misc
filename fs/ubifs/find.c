@@ -497,6 +497,7 @@ int ubifs_find_free_space(struct ubifs_info *c, int min_space, int *offs,
 {
 	const struct ubifs_lprops *lprops;
 	int lebs, rsvd_idx_lebs, pick_free = 0, err, lnum, flags;
+	int free = LPROPS_NC, dirty = LPROPS_NC;
 
 	dbg_find("min_space %d", min_space);
 	ubifs_get_lprops(c);
@@ -548,7 +549,12 @@ int ubifs_find_free_space(struct ubifs_info *c, int min_space, int *offs,
 	lnum = lprops->lnum;
 	flags = lprops->flags | LPROPS_TAKEN;
 
-	lprops = ubifs_change_lp(c, lprops, LPROPS_NC, LPROPS_NC, flags, 0);
+	if (c->leb_size == lprops->free && c->secure_leb_offs) {
+		dirty = c->secure_leb_offs;
+		free = c->leb_size - dirty;
+	}
+
+	lprops = ubifs_change_lp(c, lprops, free, dirty, flags, 0);
 	if (IS_ERR(lprops)) {
 		err = PTR_ERR(lprops);
 		goto out;
@@ -563,7 +569,7 @@ int ubifs_find_free_space(struct ubifs_info *c, int min_space, int *offs,
 	*offs = c->leb_size - lprops->free;
 	ubifs_release_lprops(c);
 
-	if (*offs == 0) {
+	if (*offs == c->secure_leb_offs) {
 		/*
 		 * Ensure that empty LEBs have been unmapped. They may not have
 		 * been, for example, because of an unclean unmount.  Also
