@@ -691,7 +691,7 @@ int ubifs_create_dflt_lpt(struct ubifs_info *c, int *main_lebs, int lpt_first,
 	pnode->lprops[1].dirty = iopos - node_sz;
 
 	for (i = 2; i < UBIFS_LPT_FANOUT; i++)
-		pnode->lprops[i].free = c->leb_size;
+		pnode->lprops[i].free = c->leb_size - c->secure_leb_offs;
 
 	/* Add first pnode */
 	ubifs_pack_pnode(c, buf + offs, pnode);
@@ -699,12 +699,12 @@ int ubifs_create_dflt_lpt(struct ubifs_info *c, int *main_lebs, int lpt_first,
 	pnode->num += 1;
 
 	/* Reset pnode values for remaining pnodes */
-	pnode->lprops[0].free = c->leb_size;
-	pnode->lprops[0].dirty = 0;
+	pnode->lprops[0].free = c->leb_size - c->secure_leb_offs;
+	pnode->lprops[0].dirty = c->secure_leb_offs;
 	pnode->lprops[0].flags = 0;
 
-	pnode->lprops[1].free = c->leb_size;
-	pnode->lprops[1].dirty = 0;
+	pnode->lprops[1].free = c->leb_size - c->secure_leb_offs;
+	pnode->lprops[1].dirty = c->secure_leb_offs;
 
 	/*
 	 * To calculate the internal node branches, we keep information about
