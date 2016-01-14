@@ -284,7 +284,7 @@ struct ubi_vid_hdr {
 	__u8    compat;
 	__be32  vol_id;
 	__be32  lnum;
-	__u8	secure_flag;
+	__u8	secure_flag; // change this to the number of ubi_vid_hdr's stored in this peb. 0: default SLC mode, 1: undefined, n: MLC/TLC mode
 	__u8    padding1[3];
 	__be32  data_size;
 	__be32  used_ebs;

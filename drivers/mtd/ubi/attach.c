@@ -836,6 +836,8 @@ static int scan_peb(struct ubi_device *ubi, struct ubi_attach_info *ai,
 		return 0;
 	}
 
+	// read @version to detect whether we support grouped pebs
+	// shall we store ngroups ec_headers? hmmm
 	err = ubi_io_read_ec_hdr(ubi, pnum, ech, 0);
 	if (err < 0)
 		return err;
@@ -919,6 +921,7 @@ static int scan_peb(struct ubi_device *ubi, struct ubi_attach_info *ai,
 
 	/* OK, we've done with the EC header, let's look at the VID header */
 
+	// if !secure_leb, read all vid headers and check == ngroups
 	err = ubi_io_read_vid_hdr(ubi, pnum, vidh, 0);
 	if (err < 0)
 		return err;

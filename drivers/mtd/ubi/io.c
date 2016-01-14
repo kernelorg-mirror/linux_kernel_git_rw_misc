@@ -86,6 +86,52 @@
  * back and writes the whole sub-page.
  */
 
+/*
+
+In SLC mode (without subpages, NOP=1) UBI stores EC header at page 0
+and VID header at page 1.
+With sub page support (NOP > 1) EC is at page 0, offset 0 and VID at
+page 0, 2nd subpage.
+
+In MLC/TLC mode (hence, NOP=1) a PEB can be secure and persistent/merged.
+side node: do we like these terms? check with Boris.
+
+Secure PEB:
+This PEB behaves like a SLC NAND block. 
+We accomplish this my exposing only the first page of a page group.
+---> We can only use 1/ngroups'th of the PEB's capacity
+---> *every* LEB has a size of 1/ngroups'th PEB size
+---> We expose ngroups * LEBs (minus one or two for the merge operation)
+EC and VID header are at page 0 and 1 + ngroups
+
+Persistent/merged PEB:
+If we run out of PEBs, UBI picks ngroups PEBs which are full (last page has been written)
+and moves all their data into *one* PEB. It will be read-only and ngroups LEBs will
+point to it.
+
+TODO: review with care
+First ngroups times pages are reserved for headers.
+EC header is at page 0, ngroups succeeding vid headers at page 1.
+Then data is alternating such that every N + ngroups'th page is for LEB0_N.
+
+also adopt @version is EC and VID header.
+Maybe change @version to a feature flags field?
+VID header should also contain the numer of ngroups this PEB is using.
+
+regular SLC UBI will have @version = 1 for both EC and VID header
+and @ngroups ignored.
+
+in MLC/TLC mode, @version is 2 | EXTENDED_PEB_FLAG.
+UBI version 2 denotes, that you have to support feature flags.
+if a VID with @ngroups == 0 is found this is a secure PEB.
+@ngroups == 1 is invalid and not allied.
+@ngroups > 2 denotes a persistent/merged PEB and all other VID headers
+need to be found and checked. also for every VID @copy_flag has to be 1
+and @data_crc valid.
+This is need to detect power cuts while merging PEBs.
+
+*/
+
 #include <linux/crc32.h>
 #include <linux/err.h>
 #include <linux/slab.h>

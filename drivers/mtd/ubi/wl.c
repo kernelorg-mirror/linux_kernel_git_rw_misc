@@ -1234,6 +1234,15 @@ retry:
 	}
 	spin_unlock(&ubi->wl_lock);
 
+	// hmm, lnum sucks here, check with:
+/*
+commit d36e59e69b8be536c55d6118630f0221cee5ccee
+Author: Joel Reardon <joel@clambassador.com>
+Date:   Fri May 18 15:40:24 2012 +0200
+
+    UBI: add lnum and vol_id to struct ubi_work
+*/
+
 	err = schedule_erase(ubi, e, vol_id, lnum, torture);
 	if (err) {
 		spin_lock(&ubi->wl_lock);
@@ -1809,6 +1818,8 @@ int ubi_wl_get_peb(struct ubi_device *ubi)
 retry:
 	down_read(&ubi->fm_eba_sem);
 	spin_lock(&ubi->wl_lock);
+
+	// we put into free 1/ngroups'th pebs
 	if (!ubi->free.rb_node) {
 		if (ubi->works_count == 0) {
 			ubi_err(ubi, "no free eraseblocks");
@@ -1817,6 +1828,7 @@ retry:
 			return -ENOSPC;
 		}
 
+		// also find some to merge
 		err = produce_free_peb(ubi);
 		if (err < 0) {
 			spin_unlock(&ubi->wl_lock);

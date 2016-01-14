@@ -341,8 +341,22 @@ struct ubi_volume {
 	long long upd_received;
 	void *upd_buf;
 
-	unsigned long *secure_lebs;
-	int *eba_tbl;
+	unsigned long *secure_lebs; // change to PEBs
+	int *eba_tbl; /* needs a big change
+
+currently eba_tbl[] is int -> int, you enter a LEB and get the PEB.
+for extended PEBs this *could* be int -> peb_desc_t.
+Where peb_desc_t is a tuple of (PNUM, n'th page of a group).
+Secure PEBs would always translate LEB -> (PNUM, 0).
+
+We could squeeze peb_desc_t into an uint32_t because
+ngroup is no that big (MLC = 2, TLC = 3) and the total number
+of PEBs is not *that* much. Check with Yang, he does UBIFS at TiB scale...
+
+Having peb_desc_t a struct with size > sizeof(int) can be problematic,
+it will increase UBI's memory footprint.
+
+*/
 	unsigned int checked:1;
 	unsigned int corrupted:1;
 	unsigned int upd_marker:1;

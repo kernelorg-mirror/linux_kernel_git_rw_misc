@@ -381,6 +381,11 @@ int ubi_eba_read_leb(struct ubi_device *ubi, struct ubi_volume *vol, int lnum,
 	if (err)
 		return err;
 
+	// replace ->eba_tbl[] by a more advanced lookup function
+	// currently we have an 1:1 mapping between LEB and PEB
+	// with ngroups we need to know which LEB is mapped to which group number of a PEB
+	// a secure LEB is always mapped to the 1st group of a PEB
+	// a persistent/merged PEB has ngroups LEBs mapped to itself
 	pnum = vol->eba_tbl[lnum];
 	if (pnum < 0) {
 		/*
@@ -410,6 +415,9 @@ retry:
 			goto out_unlock;
 		}
 
+		// read the vid header for the correct group!
+		// in general most UBI EBA/IO functions with a pnum selector need changes to
+		// accept pnum plus requested group
 		err = ubi_io_read_vid_hdr(ubi, pnum, vid_hdr, 1);
 		if (err && err != UBI_IO_BITFLIPS) {
 			if (err > 0) {
@@ -437,11 +445,13 @@ retry:
 
 		ubi_assert(lnum < be32_to_cpu(vid_hdr->used_ebs));
 		ubi_assert(len == be32_to_cpu(vid_hdr->data_size));
+		// assert for correct group number in header
 
 		crc = be32_to_cpu(vid_hdr->data_crc);
 		ubi_free_vid_hdr(ubi, vid_hdr);
 	}
 
+	// hmm, shall we keep the vol->secure_lebs and extend it?
 	err = ubi_io_read_data(ubi, buf, pnum, offset, len,
 			       test_bit(lnum, vol->secure_lebs));
 	if (err) {
@@ -681,6 +691,8 @@ int ubi_eba_write_leb(struct ubi_device *ubi, struct ubi_volume *vol, int lnum,
 		dbg_eba("write %d bytes at offset %d of LEB %d:%d, PEB %d",
 			len, offset, vol_id, lnum, pnum);
 
+		// same as for ubi_io_read_data
+		// also assert for trying to write on a persistent/merged PEB
 		err = ubi_io_write_data(ubi, buf, pnum, offset, len, secure);
 		if (err) {
 			ubi_warn(ubi, "failed to write data to PEB %d", pnum);
@@ -1022,6 +1034,26 @@ write_error:
 	vid_hdr->sqnum = cpu_to_be64(ubi_next_sqnum(ubi));
 	ubi_msg(ubi, "try another PEB");
 	goto retry;
+}
+
+int ubi_eba_atomic_leb_merge(struct ubi_device *ubi, struct ubi_volume *vol,
+			     int *lnums)
+{
+/*
+
+1. translate all ngroups*lnums to their PEBs (PEB_0 ... PEB_N here)
+2. check whether these PEBs are in secure mode and full
+3. allocate a fresh PEB (called PEB' here)
+4. write headers to PEB' (set copy_flag!!!!)
+5. copy data of PEB_0 ... PEB_N to PEB'
+6. update ->eba_tbl[] for PEB'
+7. schedule PEB_0 ... PEB_N for erasure
+8. sounds too easy, must miss something ;-\
+
+side note: while attaching *all* data_crc's in PEB' need to be correct.
+Otherwise we have to drop the whole PEB's and go back to PEB_0 .. PEB_N
+
+ */
 }
 
 /**
