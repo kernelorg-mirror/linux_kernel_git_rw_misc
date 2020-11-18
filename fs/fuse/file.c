@@ -1409,7 +1409,7 @@ ssize_t fuse_direct_io(struct fuse_io_priv *io, struct iov_iter *iter,
 		       loff_t *ppos, int flags)
 {
 	int write = flags & FUSE_DIO_WRITE;
-	int cuse = flags & FUSE_DIO_CUSE;
+	int nofs = flags & FUSE_DIO_NOFS;
 	struct file *file = io->iocb->ki_filp;
 	struct inode *inode = file->f_mapping->host;
 	struct fuse_file *ff = file->private_data;
@@ -1430,7 +1430,7 @@ ssize_t fuse_direct_io(struct fuse_io_priv *io, struct iov_iter *iter,
 		return -ENOMEM;
 
 	ia->io = io;
-	if (!cuse && fuse_range_is_writeback(inode, idx_from, idx_to)) {
+	if (!nofs && fuse_range_is_writeback(inode, idx_from, idx_to)) {
 		if (!write)
 			inode_lock(inode);
 		fuse_sync_writes(inode);
