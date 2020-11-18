@@ -522,6 +522,7 @@ ssize_t fuse_simple_request(struct fuse_mount *fm, struct fuse_args *args)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(fuse_simple_request);
 
 static bool fuse_request_queue_background(struct fuse_req *req)
 {
