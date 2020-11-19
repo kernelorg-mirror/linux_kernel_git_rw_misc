@@ -1225,5 +1225,7 @@ void fuse_dax_cancel_work(struct fuse_conn *fc);
 /* file.c */
 struct page **fuse_pages_alloc(unsigned int npages, gfp_t flags,
 			       struct fuse_page_desc **desc);
+/* helper.c */
+int fuse_kv_parse_one(char **pp, char *end, char **keyp, char **valp);
 
 #endif /* _FS_FUSE_I_H */
