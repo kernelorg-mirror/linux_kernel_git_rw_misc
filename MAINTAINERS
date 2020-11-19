@@ -11959,6 +11959,13 @@ L:	linux-usb@vger.kernel.org
 S:	Maintained
 F:	drivers/usb/musb/
 
+MUSE: MTD IN USERSPACE DRIVER
+M:	Richard Weinberger <richard@nod.at>
+L:	linux-mtd@lists.infradead.org
+L:	linux-fsdevel@vger.kernel.org
+S:	Maintained
+F:	fs/fuse/muse.c
+
 MXL301RF MEDIA DRIVER
 M:	Akihiro Tsukada <tskd08@gmail.com>
 L:	linux-media@vger.kernel.org
