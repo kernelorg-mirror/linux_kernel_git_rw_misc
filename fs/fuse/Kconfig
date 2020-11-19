@@ -18,9 +18,13 @@ config FUSE_FS
 	  If you want to develop a userspace FS, or if you want to use
 	  a filesystem based on FUSE, answer Y or M.
 
+config FUSE_HELPER
+	def_bool n
+
 config CUSE
 	tristate "Character device in Userspace support"
 	depends on FUSE_FS
+	select FUSE_HELPER
 	help
 	  This FUSE extension allows character devices to be
 	  implemented in userspace.
