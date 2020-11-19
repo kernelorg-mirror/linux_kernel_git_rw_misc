@@ -1210,4 +1210,7 @@ void fuse_dax_inode_cleanup(struct inode *inode);
 bool fuse_dax_check_alignment(struct fuse_conn *fc, unsigned int map_alignment);
 void fuse_dax_cancel_work(struct fuse_conn *fc);
 
+/* helper.c */
+int fuse_kv_parse_one(char **pp, char *end, char **keyp, char **valp);
+
 #endif /* _FS_FUSE_I_H */
