@@ -20,8 +20,8 @@
 #include <linux/uio.h>
 #include <linux/fs.h>
 
-static struct page **fuse_pages_alloc(unsigned int npages, gfp_t flags,
-				      struct fuse_page_desc **desc)
+struct page **fuse_pages_alloc(unsigned int npages, gfp_t flags,
+			       struct fuse_page_desc **desc)
 {
 	struct page **pages;
 
@@ -31,6 +31,7 @@ static struct page **fuse_pages_alloc(unsigned int npages, gfp_t flags,
 
 	return pages;
 }
+EXPORT_SYMBOL_GPL(fuse_pages_alloc);
 
 static int fuse_send_open(struct fuse_mount *fm, u64 nodeid, struct file *file,
 			  int opcode, struct fuse_open_out *outargp)
@@ -1336,17 +1337,6 @@ static inline void fuse_page_descs_length_init(struct fuse_page_desc *descs,
 
 	for (i = index; i < index + nr_pages; i++)
 		descs[i].length = PAGE_SIZE - descs[i].offset;
-}
-
-static inline unsigned long fuse_get_user_addr(const struct iov_iter *ii)
-{
-	return (unsigned long)ii->iov->iov_base + ii->iov_offset;
-}
-
-static inline size_t fuse_get_frag_size(const struct iov_iter *ii,
-					size_t max_size)
-{
-	return min(iov_iter_single_seg_count(ii), max_size);
 }
 
 static int fuse_get_user_pages(struct fuse_args_pages *ap, struct iov_iter *ii,
