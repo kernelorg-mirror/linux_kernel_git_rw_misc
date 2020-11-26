@@ -175,6 +175,10 @@
  *
  *  7.32
  *  - add flags to fuse_attr, add FUSE_ATTR_SUBMOUNT, add FUSE_SUBMOUNTS
+ *
+ *  7.33
+ *  - add support for MUSE: MUSE_INIT, MUSE_ERASE, MUSE_READ, MUSE_WRITE,
+ *    MUSE_MARKBAD, MUSE_ISBAD and MUSE_SYNC
  */
 
 #ifndef _LINUX_FUSE_H
@@ -210,7 +214,7 @@
 #define FUSE_KERNEL_VERSION 7
 
 /** Minor version number of this interface */
-#define FUSE_KERNEL_MINOR_VERSION 32
+#define FUSE_KERNEL_MINOR_VERSION 33
 
 /** The node ID of the root inode */
 #define FUSE_ROOT_ID 1
@@ -482,6 +486,15 @@ enum fuse_opcode {
 
 	/* CUSE specific operations */
 	CUSE_INIT		= 4096,
+
+	/* MUSE specific operations */
+	MUSE_INIT		= 8192,
+	MUSE_ERASE		= 8193,
+	MUSE_READ		= 8194,
+	MUSE_WRITE		= 8195,
+	MUSE_MARKBAD		= 8196,
+	MUSE_ISBAD		= 8197,
+	MUSE_SYNC		= 8198,
 
 	/* Reserved opcodes: helpful to detect structure endian-ness */
 	CUSE_INIT_BSWAP_RESERVED	= 1048576,	/* CUSE_INIT << 8 */
@@ -935,5 +948,63 @@ struct fuse_removemapping_one {
 
 #define FUSE_REMOVEMAPPING_MAX_ENTRY   \
 		(PAGE_SIZE / sizeof(struct fuse_removemapping_one))
+
+#define MUSE_INIT_INFO_MAX 4096
+
+struct muse_init_in {
+	uint32_t	fuse_major;
+	uint32_t	fuse_minor;
+};
+
+struct muse_init_out {
+	uint32_t	fuse_major;
+	uint32_t	fuse_minor;
+	uint32_t	max_read;
+	uint32_t	max_write;
+};
+
+struct muse_erase_in {
+	uint64_t	addr;
+	uint64_t	len;
+};
+
+struct muse_read_in {
+	uint64_t	dataaddr;
+	uint64_t	datalen;
+	uint32_t	flags;
+	uint32_t	padding;
+};
+
+struct muse_read_out {
+	uint64_t	datalen;
+	uint32_t	soft_error;
+	uint32_t	padding;
+};
+
+struct muse_write_in {
+	uint64_t	dataaddr;
+	uint64_t	datalen;
+	uint32_t	flags;
+	uint32_t	padding;
+};
+
+struct muse_write_out {
+	uint64_t	datalen;
+	uint32_t	soft_error;
+	uint32_t	padding;
+};
+
+struct muse_markbad_in {
+	uint64_t	addr;
+};
+
+struct muse_isbad_in {
+	uint64_t	addr;
+};
+
+struct muse_isbad_out {
+	uint32_t	result;
+	uint32_t	padding;
+};
 
 #endif /* _LINUX_FUSE_H */
