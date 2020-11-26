@@ -240,3 +240,11 @@ Contact:	linux-mtd@lists.infradead.org
 Description:
 		Number of bytes available for a client to place data into
 		the out of band area.
+
+What:		/sys/class/mtd/mtdX/muse_pid
+Date:		January 2021
+KernelVersion:	5.12
+Contact:	linux-mtd@lists.infradead.org
+Description:
+		If this MTD is a userspace driven MTD, muse_pid shows the PID
+		of the process behind it at creation time.
