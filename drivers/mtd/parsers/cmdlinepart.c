@@ -64,7 +64,7 @@ struct cmdline_mtd_partition {
 };
 
 /* mtdpart_setup() parses into here */
-static struct cmdline_mtd_partition *partitions;
+static struct cmdline_mtd_partition *cmdline_partitions;
 
 /* the command line passed to mtdpart_setup() */
 static char *mtdparts;
@@ -138,9 +138,6 @@ static struct mtd_partition * newpart(char *s,
 		name_len = 13; /* Partition_000 */
 	}
 
-	/* record name length for memory allocation later */
-	extra_mem_size += name_len + 1;
-
 	/* test for options */
 	if (strncmp(s, "ro", 2) == 0) {
 		mask_flags |= MTD_WRITEABLE;
@@ -192,12 +189,17 @@ static struct mtd_partition * newpart(char *s,
 	parts[this_part].offset = offset;
 	parts[this_part].mask_flags = mask_flags;
 	parts[this_part].add_flags = add_flags;
+
+	/*
+	 * Will get free()'ed in ->cleanup()
+	 */
 	if (name)
-		strlcpy(extra_mem, name, name_len + 1);
+		parts[this_part].name = kmemdup_nul(name, name_len, GFP_KERNEL);
 	else
-		sprintf(extra_mem, "Partition_%03d", this_part);
-	parts[this_part].name = extra_mem;
-	extra_mem += name_len + 1;
+		parts[this_part].name = kasprintf(GFP_KERNEL, "Partition_%03d", this_part);
+
+	if (!parts[this_part].name)
+		return ERR_PTR(-ENOMEM);
 
 	dbg(("partition %d: name <%s>, offset %llx, size %llx, mask flags %x\n",
 	     this_part, parts[this_part].name, parts[this_part].offset,
@@ -217,7 +219,7 @@ static struct mtd_partition * newpart(char *s,
 /*
  * Parse the command line.
  */
-static int mtdpart_setup_real(char *s)
+static int mtdpart_setup_real(char *s, struct cmdline_mtd_partition **partitions)
 {
 	cmdline_parsed = 1;
 
@@ -301,8 +303,8 @@ static int mtdpart_setup_real(char *s)
 		strlcpy(this_mtd->mtd_id, mtd_id, mtd_id_len + 1);
 
 		/* link into chain */
-		this_mtd->next = partitions;
-		partitions = this_mtd;
+		this_mtd->next = *partitions;
+		*partitions = this_mtd;
 
 		dbg(("mtdid=<%s> num_parts=<%d>\n",
 		     this_mtd->mtd_id, this_mtd->num_parts));
@@ -335,13 +337,23 @@ static int parse_cmdline_partitions(struct mtd_info *master,
 				    struct mtd_part_parser_data *data)
 {
 	unsigned long long offset;
-	int i, err;
+	int i, err, num_parts;
 	struct cmdline_mtd_partition *part;
 	const char *mtd_id = master->name;
+	struct cmdline_mtd_partition *parsed_parts = cmdline_partitions;
+	bool free_parts = false;
 
-	/* parse command line */
-	if (!cmdline_parsed) {
-		err = mtdpart_setup_real(cmdline);
+	if (data && data->mtdparts) {
+		parsed_parts = NULL;
+
+		err = mtdpart_setup_real(data->mtdparts, &parsed_parts);
+		if (err)
+			return err;
+
+		free_parts = true;
+	} else if (!cmdline_parsed) {
+		/* parse command line */
+		err = mtdpart_setup_real(cmdline, &cmdline_partitions);
 		if (err)
 			return err;
 	}
@@ -350,7 +362,7 @@ static int parse_cmdline_partitions(struct mtd_info *master,
 	 * Search for the partition definition matching master->name.
 	 * If master->name is not set, stop at first partition definition.
 	 */
-	for (part = partitions; part; part = part->next) {
+	for (part = parsed_parts; part; part = part->next) {
 		if ((!mtd_id) || (!strcmp(part->mtd_id, mtd_id)))
 			break;
 	}
@@ -384,12 +396,38 @@ static int parse_cmdline_partitions(struct mtd_info *master,
 		}
 	}
 
+	/*
+	 * Will get free()'ed in ->cleanup()
+	 */
 	*pparts = kmemdup(part->parts, sizeof(*part->parts) * part->num_parts,
 			  GFP_KERNEL);
 	if (!*pparts)
 		return -ENOMEM;
 
-	return part->num_parts;
+	num_parts = part->num_parts;
+
+	if (free_parts == true) {
+		part = parsed_parts;
+		while (part) {
+			struct cmdline_mtd_partition *next = part->next;
+
+			kfree(part->parts);
+			part = next;
+		}
+	}
+
+	return num_parts;
+}
+
+static void cmdline_partitions_cleanup(const struct mtd_partition *pparts,
+				       int nr_parts)
+{
+	int i;
+
+	for (i = 0; i < nr_parts; i++)
+		kfree(pparts[i].name);
+
+	kfree(pparts);
 }
 
 
@@ -410,6 +448,7 @@ __setup("mtdparts=", mtdpart_setup);
 
 static struct mtd_part_parser cmdline_parser = {
 	.parse_fn = parse_cmdline_partitions,
+	.cleanup = cmdline_partitions_cleanup,
 	.name = "cmdlinepart",
 };
 

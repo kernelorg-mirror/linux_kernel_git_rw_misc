@@ -65,9 +65,11 @@ struct device_node;
 /**
  * struct mtd_part_parser_data - used to pass data to MTD partition parsers.
  * @origin: for RedBoot, start address of MTD device
+ * @mtdparts: for cmdline parser, use this string instead of mtdparts= from cmdline
  */
 struct mtd_part_parser_data {
 	unsigned long origin;
+	char *mtdparts;
 };
 
 
