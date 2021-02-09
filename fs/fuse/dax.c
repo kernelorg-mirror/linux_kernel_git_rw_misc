@@ -4,14 +4,14 @@
  * Copyright (C) 2020 Red Hat, Inc.
  */
 
-#include "fuse_i.h"
-
 #include <linux/delay.h>
 #include <linux/dax.h>
 #include <linux/uio.h>
 #include <linux/pfn_t.h>
 #include <linux/iomap.h>
 #include <linux/interval_tree.h>
+
+#include <net/fuse.h>
 
 /*
  * Default memory range size.  A power of 2 so it agrees with common FUSE_INIT

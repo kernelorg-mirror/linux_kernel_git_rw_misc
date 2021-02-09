@@ -6,11 +6,11 @@
   See the file COPYING.
 */
 
-#include "fuse_i.h"
-
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/fs_context.h>
+
+#include <net/fuse.h>
 
 #define FUSE_CTL_SUPER_MAGIC 0x65735543
 

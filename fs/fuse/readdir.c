@@ -7,11 +7,12 @@
 */
 
 
-#include "fuse_i.h"
 #include <linux/iversion.h>
 #include <linux/posix_acl.h>
 #include <linux/pagemap.h>
 #include <linux/highmem.h>
+
+#include <net/fuse.h>
 
 static bool fuse_use_readdirplus(struct inode *dir, struct dir_context *ctx)
 {

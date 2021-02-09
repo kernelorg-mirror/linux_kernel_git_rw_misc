@@ -6,8 +6,6 @@
   See the file COPYING.
 */
 
-#include "fuse_i.h"
-
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/poll.h>
@@ -21,6 +19,8 @@
 #include <linux/swap.h>
 #include <linux/splice.h>
 #include <linux/sched.h>
+
+#include <net/fuse.h>
 
 MODULE_ALIAS_MISCDEV(FUSE_MINOR);
 MODULE_ALIAS("devname:fuse");

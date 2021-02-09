@@ -6,10 +6,10 @@
  * See the file COPYING.
  */
 
-#include "fuse_i.h"
-
 #include <linux/posix_acl.h>
 #include <linux/posix_acl_xattr.h>
+
+#include <net/fuse.h>
 
 struct posix_acl *fuse_get_acl(struct inode *inode, int type)
 {

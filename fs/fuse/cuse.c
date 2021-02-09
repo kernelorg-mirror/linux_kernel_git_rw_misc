@@ -51,7 +51,7 @@
 #include <linux/uio.h>
 #include <linux/user_namespace.h>
 
-#include "fuse_i.h"
+#include <net/fuse.h>
 
 #define CUSE_CONNTBL_LEN	64
 

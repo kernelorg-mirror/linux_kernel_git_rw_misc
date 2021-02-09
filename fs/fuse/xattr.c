@@ -6,10 +6,10 @@
  * See the file COPYING.
  */
 
-#include "fuse_i.h"
-
 #include <linux/xattr.h>
 #include <linux/posix_acl_xattr.h>
+
+#include <net/fuse.h>
 
 int fuse_setxattr(struct inode *inode, const char *name, const void *value,
 		  size_t size, int flags)

@@ -6,8 +6,6 @@
   See the file COPYING.
 */
 
-#include "fuse_i.h"
-
 #include <linux/pagemap.h>
 #include <linux/file.h>
 #include <linux/fs_context.h>
@@ -17,6 +15,8 @@
 #include <linux/xattr.h>
 #include <linux/iversion.h>
 #include <linux/posix_acl.h>
+
+#include <net/fuse.h>
 
 static void fuse_advise_use_readdirplus(struct inode *dir)
 {

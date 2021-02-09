@@ -16,7 +16,8 @@
 #include <linux/fs_parser.h>
 #include <linux/highmem.h>
 #include <linux/uio.h>
-#include "fuse_i.h"
+
+#include <net/fuse.h>
 
 /* List of virtio-fs device instances and a lock for the list. Also provides
  * mutual exclusion in device removal and mounting path
