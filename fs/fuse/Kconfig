@@ -18,16 +18,6 @@ config FUSE_FS
 	  If you want to develop a userspace FS, or if you want to use
 	  a filesystem based on FUSE, answer Y or M.
 
-config CUSE
-	tristate "Character device in Userspace support"
-	depends on FUSE_FS
-	help
-	  This FUSE extension allows character devices to be
-	  implemented in userspace.
-
-	  If you want to develop or use a userspace character device
-	  based on CUSE, answer Y or M.
-
 config VIRTIO_FS
 	tristate "Virtio Filesystem"
 	depends on FUSE_FS
