@@ -10,9 +10,11 @@
 #define __LINUX_POSIX_ACL_H
 
 #include <linux/bug.h>
-#include <linux/slab.h>
+#include <linux/fs.h>
 #include <linux/rcupdate.h>
 #include <linux/refcount.h>
+#include <linux/slab.h>
+#include <linux/uidgid.h>
 #include <uapi/linux/posix_acl.h>
 
 struct posix_acl_entry {
