@@ -27,6 +27,9 @@ static unsigned char *nfs_exp_embedfh(__u32 *p)
 	return (unsigned char *)(p + EMBED_FH_OFF);
 }
 
+//XXX: Only for testing
+static bool proxy_mode = true;
+
 /*
  * Let's break subtree checking for now... otherwise we'll have to embed parent fh
  * but there might not be enough space.
@@ -35,9 +38,18 @@ static int
 nfs_encode_fh(struct inode *inode, __u32 *p, int *max_len, struct inode *parent)
 {
 	struct nfs_fh *server_fh = NFS_FH(inode);
-	unsigned char *raw_fh = nfs_exp_embedfh(p);
 	size_t fh_size = server_fh->size;
-	int len = EMBED_FH_OFF + XDR_QUADLEN(fh_size);
+	unsigned char *raw_fh;
+	int len;
+
+
+	if (proxy_mode) {
+		raw_fh = (unsigned char *)p;
+		len = XDR_QUADLEN(fh_size);
+	} else {
+		raw_fh = nfs_exp_embedfh(p);
+		len = EMBED_FH_OFF + XDR_QUADLEN(fh_size);
+	}
 
 	dprintk("%s: max fh len %d inode %p parent %p",
 		__func__, *max_len, inode, parent);
@@ -54,10 +66,12 @@ nfs_encode_fh(struct inode *inode, __u32 *p, int *max_len, struct inode *parent)
 		return FILEID_INVALID;
 	}
 
-	p[FILEID_HIGH_OFF] = NFS_FILEID(inode) >> 32;
-	p[FILEID_LOW_OFF] = NFS_FILEID(inode);
-	p[FILE_I_TYPE_OFF] = inode->i_mode & S_IFMT;
-	p[len - 1] = 0; /* Padding */
+	if (!proxy_mode) {
+		p[FILEID_HIGH_OFF] = NFS_FILEID(inode) >> 32;
+		p[FILEID_LOW_OFF] = NFS_FILEID(inode);
+		p[FILE_I_TYPE_OFF] = inode->i_mode & S_IFMT;
+		p[len - 1] = 0; /* Padding */
+	}
 
 	memcpy(raw_fh, server_fh->data, server_fh->size);
 
@@ -71,16 +85,23 @@ static struct dentry *
 nfs_fh_to_dentry(struct super_block *sb, struct fid *fid,
 		 int fh_len, int fh_type)
 {
-	struct nfs_fattr *fattr = NULL;
-	unsigned char *raw_server_fh = nfs_exp_embedfh(fid->raw);
 	const struct nfs_rpc_ops *rpc_ops;
+	struct nfs_fh server_fh = { 0 };
+	struct nfs_fattr *fattr = NULL;
+	unsigned char *raw_server_fh;
 	struct dentry *dentry;
 	struct inode *inode;
 	u32 *p = fid->raw;
-	struct nfs_fh server_fh = { 0 };
 	int ret;
 
-	server_fh.size = (fh_len * XDR_UNIT) - (EMBED_FH_OFF * XDR_UNIT);
+	if (proxy_mode) {
+		raw_server_fh = (unsigned char *)fid->raw;
+		server_fh.size = (fh_len * XDR_UNIT);
+	} else {
+		raw_server_fh = nfs_exp_embedfh(fid->raw);
+		server_fh.size = (fh_len * XDR_UNIT) - (EMBED_FH_OFF * XDR_UNIT);
+	}
+
 	if (server_fh.size < 1) {
 		WARN_ON_ONCE(1);
 		/* NULL translates to ESTALE */
@@ -95,15 +116,17 @@ nfs_fh_to_dentry(struct super_block *sb, struct fid *fid,
 		goto out;
 	}
 
-	fattr->fileid = ((u64)p[FILEID_HIGH_OFF] << 32) + p[FILEID_LOW_OFF];
-	fattr->mode = p[FILE_I_TYPE_OFF];
-	fattr->valid |= NFS_ATTR_FATTR_FILEID | NFS_ATTR_FATTR_TYPE;
+	if (!proxy_mode) {
+		fattr->fileid = ((u64)p[FILEID_HIGH_OFF] << 32) + p[FILEID_LOW_OFF];
+		fattr->mode = p[FILE_I_TYPE_OFF];
+		fattr->valid |= NFS_ATTR_FATTR_FILEID | NFS_ATTR_FATTR_TYPE;
 
-	dprintk("%s: fileid %llu mode %d\n", __func__, fattr->fileid, fattr->mode);
+		dprintk("%s: fileid %llu mode %d\n", __func__, fattr->fileid, fattr->mode);
 
-	inode = nfs_ilookup(sb, fattr, &server_fh);
-	if (inode)
-		goto out_found;
+		inode = nfs_ilookup(sb, fattr, &server_fh);
+		if (inode)
+			goto out_found;
+	}
 
 	rpc_ops = NFS_SB(sb)->nfs_client->rpc_ops;
 	ret = rpc_ops->getattr(NFS_SB(sb), &server_fh, fattr, NULL);
