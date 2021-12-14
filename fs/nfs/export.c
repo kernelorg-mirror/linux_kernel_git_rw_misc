@@ -54,11 +54,6 @@ nfs_encode_fh(struct inode *inode, __u32 *p, int *max_len, struct inode *parent)
 	dprintk("%s: max fh len %d inode %p parent %p",
 		__func__, *max_len, inode, parent);
 
-	if (IS_AUTOMOUNT(inode)) {
-		dprintk("%s: refusing to create fh for automount inode %p\n",
-			__func__, inode);
-		return FILEID_INVALID;
-	}
 	if (*max_len < len) {
 		dprintk("%s: fh len %d too small, required %d\n",
 			__func__, *max_len, len);
