@@ -1410,7 +1410,7 @@ int follow_down(struct path *path)
 {
 	struct vfsmount *mnt = path->mnt;
 	bool jumped;
-	int ret = traverse_mounts(path, &jumped, NULL, 0);
+	int ret = traverse_mounts(path, &jumped, NULL, LOOKUP_AUTOMOUNT);
 
 	if (path->mnt != mnt)
 		mntput(mnt);
