@@ -208,6 +208,7 @@ static int ubiblock_read(struct ubiblock_pdu *pdu)
 		if (ret < 0)
 			return ret;
 
+		pdu->usgl.tot_offset += to_read;
 		bytes_left -= to_read;
 		to_read = bytes_left;
 		leb += 1;
@@ -299,12 +300,9 @@ static void ubiblock_do_work(struct work_struct *work)
 
 	blk_mq_start_request(req);
 
-	/*
-	 * It is safe to ignore the return value of blk_rq_map_sg() because
-	 * the number of sg entries is limited to UBI_MAX_SG_COUNT
-	 * and ubi_read_sg() will check that limit.
-	 */
-	blk_rq_map_sg(req->q, req, pdu->usgl.sg);
+	ret = blk_rq_map_sg(req->q, req, pdu->usgl.sg);
+	ubi_assert(ret > 0 && ret < UBI_MAX_SG_COUNT);
+	pdu->usgl.len = ret;
 
 	ret = ubiblock_read(pdu);
 
