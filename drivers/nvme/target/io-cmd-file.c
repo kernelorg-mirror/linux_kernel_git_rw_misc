@@ -49,12 +49,28 @@ int nvmet_file_ns_enable(struct nvmet_ns *ns)
 
 	nvmet_file_ns_revalidate(ns);
 
-	/*
-	 * i_blkbits can be greater than the universally accepted upper bound,
-	 * so make sure we export a sane namespace lba_shift.
-	 */
-	ns->blksize_shift = min_t(u8,
-			file_inode(ns->file)->i_blkbits, 12);
+	if (ns->blksize_shift) {
+		if (!ns->buffered_io) {
+			struct block_device *sb_bdev = ns->file->f_mapping->host->i_sb->s_bdev;
+			struct kstat st;
+
+			if (!vfs_getattr(&ns->file->f_path, &st, STATX_DIOALIGN, 0) &&
+			    (st.result_mask & STATX_DIOALIGN) &&
+			    (1 << ns->blksize_shift) < st.dio_offset_align)
+				return -EINVAL;
+
+			if (sb_bdev && (1 << ns->blksize_shift < bdev_logical_block_size(sb_bdev)))
+				return -EINVAL;
+		}
+	} else {
+		/*
+		 * i_blkbits can be greater than the universally accepted
+		 * upper bound, so make sure we export a sane namespace
+		 * lba_shift.
+		 */
+		ns->blksize_shift = min_t(u8,
+				file_inode(ns->file)->i_blkbits, 12);
+	}
 
 	ns->bvec_pool = mempool_create(NVMET_MIN_MPOOL_OBJ, mempool_alloc_slab,
 			mempool_free_slab, nvmet_bvec_cache);

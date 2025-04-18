@@ -77,6 +77,7 @@ static void nvmet_bdev_ns_enable_integrity(struct nvmet_ns *ns)
 
 int nvmet_bdev_ns_enable(struct nvmet_ns *ns)
 {
+	int bdev_blksize_shift;
 	int ret;
 
 	/*
@@ -100,7 +101,17 @@ int nvmet_bdev_ns_enable(struct nvmet_ns *ns)
 	}
 	ns->bdev = file_bdev(ns->bdev_file);
 	ns->size = bdev_nr_bytes(ns->bdev);
-	ns->blksize_shift = blksize_bits(bdev_logical_block_size(ns->bdev));
+	bdev_blksize_shift = blksize_bits(bdev_logical_block_size(ns->bdev));
+
+	if (ns->blksize_shift) {
+		if (ns->blksize_shift < bdev_blksize_shift) {
+			pr_err("Configured blksize_shift needs to be at least %d for device %s\n",
+				bdev_blksize_shift, ns->device_path);
+			return -EINVAL;
+		}
+	} else {
+		ns->blksize_shift = bdev_blksize_shift;
+	}
 
 	ns->pi_type = 0;
 	ns->metadata_size = 0;
