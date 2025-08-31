@@ -29,6 +29,7 @@
 #include <linux/spinlock.h>
 #include <linux/list.h>
 #include <linux/module.h>
+#include <linux/uaccess.h>
 
 #include <asm/stacktrace.h>
 #include <asm/traps.h>
@@ -83,6 +84,38 @@ extern const struct unwind_idx __stop_unwind_idx[];
 
 static DEFINE_RAW_SPINLOCK(unwind_lock);
 static LIST_HEAD(unwind_tables);
+
+static bool is_branch_link(unsigned long pc, u32 cpsr)
+{
+	if (cpsr & PSR_T_BIT) {
+		u16 hw1, hw2;
+
+		if (get_kernel_nofault(hw1, (u16 *)pc))
+			return false;
+
+		hw1 = __mem_to_opcode_thumb16(hw1);
+		if ((hw1 & 0xf800) != 0xf000)
+			return false;
+
+		if (get_kernel_nofault(hw2, (u16 *)(pc + 2)))
+			return false;
+
+		/* both BL and BLX instructions */
+		hw2 = __mem_to_opcode_thumb16(hw2);
+		return (hw2 & 0xc000) == 0xc000;
+	} else {
+		u32 instr;
+
+		if (get_kernel_nofault(instr, (u32 *)pc))
+			return false;
+
+		instr = __mem_to_opcode_arm(instr);
+
+		/* both BL and BLX instructions */
+		return (instr & 0x0f000000) == 0x0b000000 ||
+		       (instr & 0xfe000000) == 0xfa000000;
+	}
+}
 
 /* Convert a prel31 symbol to an absolute address */
 #define prel31_to_addr(ptr)				\
@@ -523,6 +556,7 @@ void unwind_backtrace(struct pt_regs *regs, struct task_struct *tsk,
 		      const char *loglvl)
 {
 	struct stackframe frame;
+	u32 cpsr;
 
 	printk("%sCall trace: ", loglvl);
 
@@ -531,11 +565,15 @@ void unwind_backtrace(struct pt_regs *regs, struct task_struct *tsk,
 	if (!tsk)
 		tsk = current;
 
+	/* Get the current CPSR */
+	asm("mrs %0, cpsr" : "=r" (cpsr));
+
 	if (regs) {
 		arm_get_current_stackframe(regs, &frame);
 		/* PC might be corrupted, use LR in that case. */
 		if (!kernel_text_address(regs->ARM_pc))
 			frame.pc = regs->ARM_lr;
+		cpsr = regs->ARM_cpsr;
 	} else if (tsk == current) {
 		frame.fp = (unsigned long)__builtin_frame_address(0);
 		frame.sp = current_stack_pointer;
@@ -559,12 +597,26 @@ here:
 	}
 
 	while (1) {
-		int urc;
 		unsigned long where = frame.pc;
+		unsigned long from;
+		int urc;
 
 		urc = unwind_frame(&frame);
 		if (urc < 0)
 			break;
+
+		/* Adjust frame.pc to point at the BL instruction to avoid
+		 * problems with a noreturn function calling another noreturn
+		 * function (e.g. panic() calling vpanic()). Without this
+		 * correction, it leads to the wrong function being unwound.
+		 * in the next iteration. This also changes the output to
+		 * point at the BL instruction. Only do this adjustment if
+		 * the instruction is a BL.
+		 */
+		from = frame.pc - 4;
+		if (is_branch_link(from, cpsr))
+			frame.pc = from;
+
 		dump_backtrace_entry(where, frame.pc, frame.sp - 4, loglvl);
 	}
 }

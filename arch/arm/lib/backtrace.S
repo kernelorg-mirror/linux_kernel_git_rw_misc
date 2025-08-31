@@ -75,6 +75,10 @@ for_each_frame:	tst	frame, mask		@ Check for address exceptions
 		ldr	r1, [frame, #-4]	@ get saved lr
 		mov	r2, frame
 		bic	r1, r1, mask		@ mask PC/LR for the mode
+1004:		ldr	r3, [r1, #-4]		@ get possible BL instruction
+		and	r3, r3, #0x0f000000
+		teq	r3, #0x0b000000		@ if this was a BL instruction
+		subeq	r1, r1, #4		@ point at that instruction
 		mov	r3, loglvl
 		bl	dump_backtrace_entry
 
@@ -86,7 +90,7 @@ for_each_frame:	tst	frame, mask		@ Check for address exceptions
 		mov	r2, loglvl
 		bleq	dump_backtrace_stm	@ dump saved registers
 
-1004:		ldr	r1, [sv_pc, #0]		@ if stmfd sp!, {..., fp, ip, lr, pc}
+1005:		ldr	r1, [sv_pc, #0]		@ if stmfd sp!, {..., fp, ip, lr, pc}
 		ldr	r3, .Ldsi		@ instruction exists,
 		teq	r3, r1, lsr #11
 		subeq	r0, frame, #16
@@ -114,12 +118,13 @@ for_each_frame:	tst	frame, mask		@ Check for address exceptions
 		bl	_printk
 no_frame:	ldmfd	sp!, {r4 - r9, pc}
 ENDPROC(c_backtrace)
-		
+
 		.pushsection __ex_table,"a"
 		.align	3
 		.long	1001b, 1006b
 		.long	1002b, 1006b
 		.long	1003b, 1006b
+		.long	1005b, 1006b
 		.long	1004b, 1006b
 		.popsection
 
