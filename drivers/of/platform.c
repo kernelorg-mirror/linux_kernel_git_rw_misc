@@ -166,6 +166,9 @@ static struct platform_device *of_platform_device_create_pdata(
 	if (!dev)
 		goto err_clear_flag;
 
+	if (of_device_is_manually(np))
+		dev->dev.skip_autoprobe = true;
+
 	dev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
 	if (!dev->dev.dma_mask)
 		dev->dev.dma_mask = &dev->dev.coherent_dma_mask;
@@ -220,6 +223,9 @@ static struct amba_device *of_amba_device_create(struct device_node *node,
 	dev = amba_device_alloc(NULL, 0, 0);
 	if (!dev)
 		goto err_clear_flag;
+
+	if (of_device_is_manually(node))
+		dev->dev.skip_autoprobe = true;
 
 	/* AMBA devices only support a single DMA mask */
 	dev->dev.coherent_dma_mask = DMA_BIT_MASK(32);

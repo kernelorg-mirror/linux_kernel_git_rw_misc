@@ -926,6 +926,9 @@ static int __device_attach_driver(struct device_driver *drv, void *_data)
 	bool async_allowed;
 	int ret;
 
+	if (dev->skip_autoprobe)
+		return 0;
+
 	ret = driver_match_device(drv, dev);
 	if (ret == 0) {
 		/* no match */
@@ -1169,6 +1172,9 @@ static int __driver_attach(struct device *dev, void *data)
 	 * driver_probe_device() will spit a warning if there
 	 * is an error.
 	 */
+
+	if (dev->skip_autoprobe)
+		return 0;
 
 	ret = driver_match_device(drv, dev);
 	if (ret == 0) {

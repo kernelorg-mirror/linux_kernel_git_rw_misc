@@ -470,18 +470,33 @@ static bool __of_device_is_status(const struct device_node *device,
  *
  *  @device: Node to check for availability, with locks already held
  *
- *  Return: True if the status property is absent or set to "okay" or "ok",
+ *  Return: True if the status property is absent or set to "okay", "ok"
+ *  or "okay-manually".
  *  false otherwise
  */
 static bool __of_device_is_available(const struct device_node *device)
 {
-	static const char * const ok[] = {"okay", "ok", NULL};
+	static const char * const ok[] = {"okay", "ok", "okay-manually", NULL};
 
 	if (!device)
 		return false;
 
 	return !__of_get_property(device, "status", NULL) ||
 		__of_device_is_status(device, ok);
+}
+
+/**
+ *  __of_device_is_manually - check if a device should get probed manually
+ *
+ *  @device: Node to check for the manually property , with locks already held
+ *
+ *  Return: True if the status property is set to "okay-manually", false otherwise
+ */
+static bool __of_device_is_manually(const struct device_node *device)
+{
+	static const char *const manually[] = {"okay-manually", NULL};
+
+	return __of_device_is_status(device, manually);
 }
 
 /**
@@ -503,7 +518,8 @@ static bool __of_device_is_reserved(const struct device_node *device)
  *
  *  @device: Node to check for availability
  *
- *  Return: True if the status property is absent or set to "okay" or "ok",
+ *  Return: True if the status property is absent or set to "okay", "ok"
+ *  or "okay-manually".
  *  false otherwise
  */
 bool of_device_is_available(const struct device_node *device)
@@ -518,6 +534,26 @@ bool of_device_is_available(const struct device_node *device)
 
 }
 EXPORT_SYMBOL(of_device_is_available);
+
+/**
+ *  of_device_is_manually - check if a device should get probed manually
+ *
+ *  @device: Node to check for the manually property , with locks already held
+ *
+ *  Return: True if the status property is "okay-manually", false otherwise
+ */
+bool of_device_is_manually(const struct device_node *device)
+{
+	unsigned long flags;
+	bool res;
+
+	raw_spin_lock_irqsave(&devtree_lock, flags);
+	res = __of_device_is_manually(device);
+	raw_spin_unlock_irqrestore(&devtree_lock, flags);
+	return res;
+
+}
+EXPORT_SYMBOL(of_device_is_manually);
 
 /**
  *  __of_device_is_fail - check if a device has status "fail" or "fail-..."
