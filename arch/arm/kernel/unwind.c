@@ -85,9 +85,9 @@ extern const struct unwind_idx __stop_unwind_idx[];
 static DEFINE_RAW_SPINLOCK(unwind_lock);
 static LIST_HEAD(unwind_tables);
 
-static bool is_branch_link(unsigned long pc, u32 cpsr)
+static bool is_branch_link(unsigned long pc, bool thumb)
 {
-	if (cpsr & PSR_T_BIT) {
+	if (thumb) {
 		u16 hw1, hw2;
 
 		if (get_kernel_nofault(hw1, (u16 *)pc))
@@ -401,7 +401,7 @@ static int unwind_exec_insn(struct unwind_ctrl_block *ctrl)
 			goto error;
 	} else if (insn == 0xb0) {
 		if (ctrl->vrs[PC] == 0)
-			ctrl->vrs[PC] = ctrl->vrs[LR];
+			ctrl->vrs[PC] = ctrl->vrs[LR] & 0xfffffffe;
 		/* no further processing */
 		ctrl->entries = 0;
 	} else if (insn == 0xb1) {
@@ -459,7 +459,7 @@ int unwind_frame(struct stackframe *frame)
 				 * PC+immediate LDR, and so they don't affect
 				 * the state of the stack or the register file
 				 */
-				frame->pc = frame->lr;
+				frame->pc = frame->lr & 0xfffffffe;
 				return URC_OK;
 			}
 			pr_warn("unwind: Index not found %08lx\n", frame->pc);
@@ -486,7 +486,7 @@ int unwind_frame(struct stackframe *frame)
 		 */
 		if (frame->pc == frame->lr)
 			return -URC_FAILURE;
-		frame->pc = frame->lr;
+		frame->pc = frame->lr & 0xfffffffe;
 		return URC_OK;
 	} else if ((idx->insn & 0x80000000) == 0)
 		/* prel31 to the unwind table */
@@ -537,7 +537,7 @@ int unwind_frame(struct stackframe *frame)
 	}
 
 	if (ctrl.vrs[PC] == 0)
-		ctrl.vrs[PC] = ctrl.vrs[LR];
+		ctrl.vrs[PC] = ctrl.vrs[LR] & 0xfffffffe;
 
 	/* check for infinite loop */
 	if (frame->pc == ctrl.vrs[PC] && frame->sp == ctrl.vrs[SP])
@@ -556,7 +556,6 @@ void unwind_backtrace(struct pt_regs *regs, struct task_struct *tsk,
 		      const char *loglvl)
 {
 	struct stackframe frame;
-	u32 cpsr;
 
 	printk("%sCall trace: ", loglvl);
 
@@ -565,15 +564,11 @@ void unwind_backtrace(struct pt_regs *regs, struct task_struct *tsk,
 	if (!tsk)
 		tsk = current;
 
-	/* Get the current CPSR */
-	asm("mrs %0, cpsr" : "=r" (cpsr));
-
 	if (regs) {
 		arm_get_current_stackframe(regs, &frame);
 		/* PC might be corrupted, use LR in that case. */
 		if (!kernel_text_address(regs->ARM_pc))
-			frame.pc = regs->ARM_lr;
-		cpsr = regs->ARM_cpsr;
+			frame.pc = regs->ARM_lr & 0xfffffffe;
 	} else if (tsk == current) {
 		frame.fp = (unsigned long)__builtin_frame_address(0);
 		frame.sp = current_stack_pointer;
@@ -614,7 +609,7 @@ here:
 		 * the instruction is a BL.
 		 */
 		from = frame.pc - 4;
-		if (is_branch_link(from, cpsr))
+		if (is_branch_link(from, frame.lr & 0x1))
 			frame.pc = from;
 
 		dump_backtrace_entry(where, frame.pc, frame.sp - 4, loglvl);
