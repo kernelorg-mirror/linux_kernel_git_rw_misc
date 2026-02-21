@@ -56,6 +56,7 @@
 #include <linux/bitops.h>
 #include <linux/nospec.h>
 #include <linux/regmap.h>
+#include <linux/pwm.h>
 #include "lm75.h"
 #include "nct6775.h"
 
@@ -2483,6 +2484,9 @@ store_pwm_mode(struct device *dev, struct device_attribute *attr,
 	int err;
 	u16 reg;
 
+	if (data->pwm_exported[nr])
+		return -EBUSY;
+
 	err = kstrtoul(buf, 10, &val);
 	if (err < 0)
 		return err;
@@ -2511,13 +2515,8 @@ out:
 	return err ? : count;
 }
 
-static ssize_t
-show_pwm(struct device *dev, struct device_attribute *attr, char *buf)
+static int read_pwm(struct nct6775_data *data, int nr, int index)
 {
-	struct nct6775_data *data = nct6775_update_device(dev);
-	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
-	int nr = sattr->nr;
-	int index = sattr->index;
 	int err;
 	u16 pwm;
 
@@ -2536,18 +2535,27 @@ show_pwm(struct device *dev, struct device_attribute *attr, char *buf)
 		pwm = data->pwm[index][nr];
 	}
 
-	return sysfs_emit(buf, "%d\n", pwm);
+	return pwm;
 }
 
 static ssize_t
-store_pwm(struct device *dev, struct device_attribute *attr, const char *buf,
-	  size_t count)
+show_pwm(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	struct nct6775_data *data = dev_get_drvdata(dev);
+	struct nct6775_data *data = nct6775_update_device(dev);
 	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
 	int nr = sattr->nr;
 	int index = sattr->index;
-	unsigned long val;
+	u16 pwm;
+
+	pwm = read_pwm(data, nr, index);
+	if (pwm < 0)
+		return pwm;
+
+	return sysfs_emit(buf, "%d\n", pwm);
+}
+
+static int write_pwm(struct nct6775_data *data, int nr, int index, unsigned long val)
+{
 	int minval[7] = { 0, 1, 1, data->pwm[2][nr], 0, 0, 0 };
 	int maxval[7]
 	  = { 255, 255, data->pwm[3][nr] ? : 255, 255, 255, 255, 255 };
@@ -2561,9 +2569,6 @@ store_pwm(struct device *dev, struct device_attribute *attr, const char *buf,
 	if (index == 0 && data->pwm_enable[nr] > manual)
 		return -EBUSY;
 
-	err = kstrtoul(buf, 10, &val);
-	if (err < 0)
-		return err;
 	val = clamp_val(val, minval[index], maxval[index]);
 
 	mutex_lock(&data->update_lock);
@@ -2582,6 +2587,28 @@ store_pwm(struct device *dev, struct device_attribute *attr, const char *buf,
 	}
 out:
 	mutex_unlock(&data->update_lock);
+
+	return 0;
+}
+
+static ssize_t
+store_pwm(struct device *dev, struct device_attribute *attr, const char *buf,
+	  size_t count)
+{
+	struct nct6775_data *data = dev_get_drvdata(dev);
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+	unsigned long val;
+	int err;
+
+	if (data->pwm_exported[sattr->nr])
+		return -EBUSY;
+
+	err = kstrtoul(buf, 10, &val);
+	if (err < 0)
+		return err;
+
+	err = write_pwm(data, sattr->nr, sattr->index, val);
+
 	return err ? : count;
 }
 
@@ -2681,6 +2708,9 @@ store_pwm_enable(struct device *dev, struct device_attribute *attr,
 	unsigned long val;
 	int err;
 	u16 reg;
+
+	if (data->pwm_exported[nr])
+		return -EBUSY;
 
 	err = kstrtoul(buf, 10, &val);
 	if (err < 0)
@@ -3499,6 +3529,118 @@ static int add_temp_sensors(struct nct6775_data *data, const u16 *regp,
 		*available &= ~BIT(index);
 		*mask |= BIT(src);
 	}
+
+	return 0;
+}
+
+static int nct6775_pwm_round_waveform_fromhw(struct pwm_chip *chip,
+					     struct pwm_device *pwm,
+					     const void *_wfhw,
+					     struct pwm_waveform *wf)
+{
+	const u8 *wfhw = _wfhw;
+
+	wf->period_length_ns = 255;
+	wf->duty_length_ns = *wfhw;
+	wf->duty_offset_ns = 0;
+
+	return 0;
+}
+
+static int nct6775_pwm_round_waveform_tohw(struct pwm_chip *chip,
+					   struct pwm_device *pwm,
+					   const struct pwm_waveform *wf,
+					   void *_wfhw)
+{
+	u8 *wfhw = _wfhw;
+
+	if (wf->period_length_ns != 255)
+		return -EINVAL;
+
+	if (wf->duty_length_ns > 255)
+		*wfhw = 255;
+	else
+		*wfhw = wf->duty_length_ns;
+
+	return 0;
+}
+
+
+static int nct6775_pwm_write_waveform(struct pwm_chip *chip,
+				      struct pwm_device *pwm,
+				      const void *_wfhw)
+{
+	struct nct6775_data *data = pwmchip_get_drvdata(chip);
+	const u8 *wfhw = _wfhw;
+
+	return write_pwm(data, pwm->hwpwm, 0, *wfhw);
+}
+
+static int nct6775_pwm_read_waveform(struct pwm_chip *chip,
+				     struct pwm_device *pwm,
+				     void *_wfhw)
+{
+	struct nct6775_data *data = nct6775_update_device(pwmchip_parent(chip));
+	u8 *wfhw = _wfhw;
+	int val;
+
+	val = read_pwm(data, pwm->hwpwm, 0);
+	if (val < 0)
+		return val;
+
+	*wfhw = (u8)val;
+
+	return 0;
+}
+
+static int nct6775_pwm_request(struct pwm_chip *chip, struct pwm_device *pwm)
+{
+	struct nct6775_data *data = pwmchip_get_drvdata(chip);
+
+	if (data->pwm_enable[pwm->hwpwm] > manual)
+		return -EBUSY;
+
+	data->pwm_exported[pwm->hwpwm] = true;
+
+	return 0;
+}
+
+static void nct6775_pwm_free(struct pwm_chip *chip, struct pwm_device *pwm)
+{
+	struct nct6775_data *data = pwmchip_get_drvdata(chip);
+
+	data->pwm_exported[pwm->hwpwm] = false;
+}
+
+static const struct pwm_ops nct6775_pwm_ops = {
+	.sizeof_wfhw = sizeof(u8),
+	.request = nct6775_pwm_request,
+	.free = nct6775_pwm_free,
+	.round_waveform_fromhw = nct6775_pwm_round_waveform_fromhw,
+	.round_waveform_tohw = nct6775_pwm_round_waveform_tohw,
+	.write_waveform = nct6775_pwm_write_waveform,
+	.read_waveform = nct6775_pwm_read_waveform,
+};
+
+static int nct6775_register_pwm_chip(struct device *dev, struct nct6775_data *data)
+{
+	struct pwm_chip *chip;
+	int ret;
+
+	if (data->pwm_num < 1)
+		return 0;
+
+	chip = devm_pwmchip_alloc(dev, data->pwm_num, 0);
+	if (IS_ERR(chip))
+		return PTR_ERR(chip);
+
+	chip->ops = &nct6775_pwm_ops;
+	pwmchip_set_drvdata(chip, data);
+
+	ret = devm_pwmchip_add(dev, chip);
+	if (ret)
+		return dev_err_probe(dev, ret, "Could not add PWM chip\n");
+
 
 	return 0;
 }
@@ -4378,6 +4520,10 @@ int nct6775_probe(struct device *dev, struct nct6775_data *data,
 
 	err = nct6775_add_template_attr_group(dev, data, &nct6775_temp_template_group,
 					      fls(data->have_temp));
+	if (err)
+		return err;
+
+	err = nct6775_register_pwm_chip(dev, data);
 	if (err)
 		return err;
 
